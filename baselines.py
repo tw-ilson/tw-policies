@@ -24,12 +24,13 @@ class TabularBaseline(AbstractBaseline):
         return self.baselines[state]
 
     def update(self, trajectories: Set[Dict]):
+        pass
 
-        for tau in trajectories:
-            sum( \
-                abs(self.baselines[s_t] 
+                    
 
-
+class TDBaseline(AbstractBaseline):
+    '''Baseline is calculated using TD updates. 
+    '''
 
 
         
