@@ -6,30 +6,34 @@ import os
 import numpy as np
 from matplotlib import pyplot as plt
 import torch
-from torch.distributions import Categorical
 
 import gym
-import random
 from tqdm import tqdm
 import pickle
 
 ####################################################
-# Atari Learning Environment 
+# # Atari Learning Environment 
 import ale_py
 from ale_py import ALEInterface, SDL_SUPPORT
-from ale_py.roms import Galaxian
+from ale_py.roms import Pong, Breakout
 
-# ale = ALEInterface()
-# ale.loadROM(Galaxian)
+# Print all registered ROMs
+# import ale_py.roms as roms
+# print(roms.__all__)
+
+
+ale = ALEInterface()
+ale.loadROM(Pong)
 #
 # # Check if we can display the screen
-# if SDL_SUPPORT:
-#     ale.setBool("sound", True)
-#     ale.setBool("display_screen", True)
+if SDL_SUPPORT:
+    ale.setBool("sound", True)
+    ale.setBool("display_screen", True)
 ###################################################
 
-from policy_functions import NNPolicyApproximator, LinearPolicyApproximator
-from baselines import TDBaseline
+from policy_functions import NNDiscretePolicyApproximator, LinearDiscretePolicyApproximator
+from returns import AbstractReturns, MonteCarloReturns, MonteCarloBaselineReturns, ValueNetworkReturns
+from utils import ReplayBuffer
 
 
 class PolicyGradientAgent():
@@ -50,19 +54,16 @@ class PolicyGradientAgent():
             gamma:float=0.98,
             env:gym.Env=None) -> None:
 
-        self.env = env
+        self.env = env  
         self.gamma = gamma
 
         self.start_state = ...
 
+        #define policy function and advantage
         self.pi = ...
+        self.G = ...
 
-        #placeholder baseline is zero
-        self.baseline = lambda r: 0
-
-        self.i = 0
         self.n_iter = ...
-
 
     def playout(self, render:bool=False):
             t=0 
@@ -88,20 +89,20 @@ class PolicyGradientAgent():
 
             return current_playout
 
-    def compute_return_advantage(self, playout):
-            trajectory = OrderedDict()
-            t = len(playout) - 1
-            s_t, a,  reward, log_prob = playout[-1]
-            trajectory[bytes(s_t)] = reward, reward - self.baseline(s_t)
-            while t > 0:
-                t-=1
-                s_t, a, reward, log_prob = playout[t]
-                ret_tnext = trajectory[bytes(playout[t+1][0])][0]
-                ret_t = reward + self.gamma * ret_tnext
-                adv_t = ret_t - self.baseline(s_t)
-                trajectory[bytes(s_t)] = ret_t, adv_t
-
-            return trajectory
+    # def compute_return_advantage(self, playout):
+    #         trajectory = OrderedDict()
+    #         t = len(playout) - 1
+    #         s_t, a,  reward, log_prob = playout[-1]
+    #         trajectory[bytes(s_t)] = reward, reward - self.baseline(s_t)
+    #         while t > 0:
+    #             t-=1
+    #             s_t, a, reward, log_prob = playout[t]
+    #             ret_tnext = trajectory[bytes(playout[t+1][0])][0]
+    #             ret_t = reward + self.gamma * ret_tnext
+    #             adv_t = ret_t - self.baseline(s_t)
+    #             trajectory[bytes(s_t)] = ret_t, adv_t
+    #
+    #         return trajectory
 
     def train(self, n_iter):
         '''This method will implement the policy gradient algorithm for each respective subclass'''
@@ -114,33 +115,29 @@ class REINFORCEAgent(PolicyGradientAgent):
 
     def __init__(self, 
             policy_fn:Callable,
-            gamma: float = 0.98, 
+            gamma: float = 0.99, 
             env: gym.Env = None) -> None:
         super().__init__(gamma, env)
         
         self.pi = policy_fn
+        self.G = MonteCarloReturns(self.gamma)
 
 
     def train(self, n_iter):
-        self.n_iter = n_iter
         pbar = tqdm(range(1, n_iter+1), file=sys.stdout)
         episode_rewards = []
+        scores = []
         for episode in pbar:
-            scores = []
-            total = 0
             tau = self.playout()
-            G_tau = self.compute_return_advantage(tau)
-            for s_t, a_t, r, log_prob in tau:
-                R = G_tau[bytes(s_t)][0]
-                score = self.pi.compute_score(s_t, a_t, log_prob, R)
-                scores.append(score)
+            score = self.pi.compute_score(
+                        tau,
+                        self.G(tau))
+            self.pi.update_params(score)
 
-                total += r
-            self.pi.update_params(scores)
-            episode_rewards.append(total)
-            pbar.set_description(f'avg. return == {sum(episode_rewards)/episode}')
-        plot_results(episode_rewards)
-
+            episode_rewards.append(sum(r for _,_, r, _ in tau))
+            scores.append(score)
+            pbar.set_description(f'avg. return == {sum(episode_rewards)/episode:.3f}')
+        plot_curves(episode_rewards, scores)
 
 
 class VanillaPolicyGradientAgent(PolicyGradientAgent):
@@ -149,61 +146,79 @@ class VanillaPolicyGradientAgent(PolicyGradientAgent):
 
     def __init__(self, 
             policy_fn:Callable, 
-            baseline:Callable, 
-            batch_size=40, 
+            G:AbstractReturns=None, 
+            batch_size=16, 
             gamma: float = 0.98, 
-            env: gym.Env=None) -> None:
+            env: gym.Env=gym.make('CartPole-v1')) -> None:
 
         super().__init__(gamma, env)
         self.batch_size = batch_size
 
+        self.buffer = ReplayBuffer(400, self.pi.state_dim, self.pi.action_space)
         self.pi = policy_fn
-        self.baseline = baseline
+        self.G = G
+        if G is None:
+            self.G = R.MonteCarloReturns(self.gamma)
 
     def train(self, n_iter):
         self.n_iter = n_iter
+        avg_batch_rewards = []
+        scores = []
 
-        for _ in tqdm(range(n_iter)):
-            trajectories = list()
+        pbar = tqdm(range(1, n_iter+1))
+        for episode in pbar:
+            batch_reward = 0
+            batch_loss = 0
             for _ in range(self.batch_size):
                 tau = self.playout()
-                G_tau = self.compute_return_advantage(tau)
-                trajectories.append((tau, G_tau))
+                G_tau = self.G(tau)
+                batch_loss += self.pi.compute_score(tau, G_tau)
+                batch_reward += sum(r for _,_, r, _ in tau)
+            self.pi.update_params(batch_loss)
 
-            # weights = weights + alpha * G_tau[s_t] * grad_log(policy(a_t | s_t))
-            for s_t, a_t, r in tau:
-                self.pi.zero_grad()
-        
+            avg_batch_rewards.append(batch_reward/self.batch_size)
+            scores.append(batch_reward)
+            pbar.set_description(f'avg. return == {sum(avg_batch_rewards)/episode:.3f}')
 
-def plot_results(scores):
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    plt.plot(np.arange(1, len(scores)+1), scores)
-    plt.ylabel('Score')
-    plt.xlabel('Episode #')
-    plt.show()
+                
+def plot_curves(rewards, loss):
+    f, axs = plt.subplots(1, 2, figsize=(7,2.5))
+    W = 50 # smoothing window
+
+    [a.clear() for a in axs]
+    axs[0].plot(np.convolve(rewards, np.ones(W)/W, 'valid'))
+    axs[0].set_xlabel('episodes')
+    axs[0].set_ylabel('episodic rewards')
+
+    if len(loss) > 0:
+        axs[1].plot(np.convolve(loss, np.ones(W)/W, 'valid'))
+    axs[1].set_xlabel('opt steps')
+    axs[1].set_ylabel('score')
+    plt.tight_layout()
 
 if __name__ == '__main__':
-    env = gym.make("CartPole-v1")
-    policy_fn = NNPolicyApproximator(env.observation_space, env.action_space, alpha=1e-3)
-    # policy_fn = LinearPolicyApproximator(env.observation_space, env.action_space, alpha=1e-2)
+    env = gym.make("ALE/Pong")
+    # env = gym.make("CartPole-v1")
+    policy_fn = NNDiscretePolicyApproximator(env.observation_space, env.action_space, alpha=1e-2, from_image=True)
+    # policy_fn = LinearDiscretePolicyApproximator(env.observation_space, env.action_space, alpha=1e-2)
 
-    # agent = REINFORCEAgent(
+
+    agent = REINFORCEAgent(
+                policy_fn=policy_fn,
+                gamma=0.98,
+                env=env)
+
+    # agent = VanillaPolicyGradientAgent(
     #             policy_fn=policy_fn,
-    #             gamma=0.9,
-    #             env=env)
-    with open("policy.model") as model_file:
-        agent = pickle.load(model_file)
+    #             gamma=0.98,
+    #             env=env,
+    #             batch_size=4)
 
-    with open("training.txt", 'a') as dump:
-        n_epochs = 1
-        for e in range(n_epochs):
-            line = f'epoch {e}: {agent.train(1000)}'
-            # dump.write(line)
-            agent.playout(render=True)
-
-    with open("policy.model", 'wb') as model_dump:
-        pickle.dump(policy_fn, model_dump)
+    n_epochs = 20
+    for e in range(n_epochs):
+        agent.train(2000)
+        plt.show()
+        agent.playout(render=True)
 
     exit()
 
