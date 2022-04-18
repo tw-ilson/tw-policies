@@ -1,6 +1,6 @@
-from typing import Any, Tuple, List
 from abc import ABC, abstractmethod
 from collections import OrderedDict
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -19,6 +19,14 @@ class AbstractReturns(ABC):
         
     @abstractmethod
     def __call__(self, **kwargs):
+        """Get the expected returns given a single transition
+        """
+        pass
+
+    @abstractmethod
+    def update_baseline(self, tau):
+        """Update the baseline for the return function based on tau playouts data received.
+        """
         pass
 
 class MonteCarloReturns(AbstractReturns):
@@ -28,23 +36,40 @@ class MonteCarloReturns(AbstractReturns):
     def __init__(self, gamma) -> None:
         super().__init__()
         self.gamma = gamma
+        self.returns_dict = {}
 
-    def __call__(self, playout) -> dict:
-        """ Given a full playout, implements top-down dynamic programming to compute the return following from each state encountered in the trajectory
+    def update_baseline(self, *playouts):
+        '''based on a batch of playouts, calculates the average expected return from all states encountered (inefficient)
+        '''
+        avg_returns = {}
+        n_visited = {}
+        for tau in playouts:
+            ret_tau = self.reward_to_go(tau)
+            for state in ret_tau:
+                avg_returns.setdefault(state, 0)
+                n_visited.setdefault(state, 0)
+                avg_returns[state] = (n_visited[state] * avg_returns[state] + ret_tau[state]) / (n_visited[state] + 1)
+                n_visited[state] += 1
+        self.returns_dict = avg_returns
+
+    def reward_to_go(self, tau):
+        """ Given a single full playout, implements top-down dynamic programming to compute the return following from each state encountered in the trajectory
         """
         trajectory = OrderedDict()
-        t = len(playout) - 1
-        s_t, a,  reward, log_prob = playout[-1]
+        t = len(tau) - 1
+        s_t, a,  reward, log_prob = tau[-1]
         trajectory[bytes(s_t)] = reward
         while t > 0:
             t-=1
-            s_t, a, reward, log_prob = playout[t]
-            ret_tnext = trajectory[bytes(playout[t+1][0])]
+            s_t, a, reward, log_prob = tau[t]
+            ret_tnext = trajectory[bytes(tau[t+1][0])]
             ret_t = reward + self.gamma * ret_tnext
             trajectory[bytes(s_t)] = ret_t
             assert not np.isnan(ret_t)
-
         return trajectory
+
+    def __call__(self, state):
+        return self.returns_dict[bytes(state)]
 
 class MonteCarloBaselineReturns(MonteCarloReturns):
     """ This Advantage function requires full monte-carlo style playouts of a policy in order to directly calculate the returns from each state in the given playout.
@@ -55,13 +80,11 @@ class MonteCarloBaselineReturns(MonteCarloReturns):
         super().__init__(gamma)
         self.baseline = baseline
 
-    def __call__(self, playout) -> dict:
-        """ Given a full playout, implements top-down dynamic programming to compute the return following from each state encountered in the trajectory
-        """
-        traj_ret = super.__call__(playout)
-        traj_b = {bytes(s): self.baseline(s) for s, a, r, p in playout}
+    def update_baseline(self, *playouts):
+        super().update_baseline(*playouts)
+        self.baseline.update_baseline(*playouts)
 
-        return {s: traj_ret[s] - traj_b[s] for s in traj_ret}
+        self.returns_dict = {s: self.returns_dict[s] - self.baseline(s) for s in self.returns_dict}
 
 class ValueNetworkReturns(AbstractReturns, torch.nn.Module):
     def __init__(self, input_shape, alpha=1e-3, from_image=False) -> None:
@@ -131,7 +154,7 @@ class ValueNetworkReturns(AbstractReturns, torch.nn.Module):
         V = self.forward(state)
         return V
     
-    def optimize(self, s, a, r, sp, d):
+    def update_baseline(self, s, a, r, sp, d):
         '''optimizes the value estimator
         '''
 

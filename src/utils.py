@@ -1,5 +1,7 @@
 from typing import Tuple
+
 import numpy as np
+
 
 class ReplayBuffer:
     def __init__(self,

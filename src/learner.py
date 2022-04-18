@@ -1,4 +1,4 @@
-from typing import Dict, Set, List, Tuple, Callable, Any
+from typing import List, Tuple, Callable, Any
 from collections import OrderedDict
 import sys
 import os
@@ -7,32 +7,24 @@ import numpy as np
 from matplotlib import pyplot as plt
 import torch
 
+import ale_py
+
 import gym
 from tqdm import tqdm
 import pickle
 
-####################################################
-# # Atari Learning Environment 
-import ale_py
 from ale_py import ALEInterface, SDL_SUPPORT
-from ale_py.roms import Pong, Breakout
-
-# Print all registered ROMs
-# import ale_py.roms as roms
-# print(roms.__all__)
-
 
 ale = ALEInterface()
-ale.loadROM(Pong)
-#
+# ale.loadROM(Pong)
 # # Check if we can display the screen
 if SDL_SUPPORT:
     ale.setBool("sound", True)
     ale.setBool("display_screen", True)
-###################################################
+
 
 from policy_functions import NNDiscretePolicyApproximator, LinearDiscretePolicyApproximator
-from returns import AbstractReturns, MonteCarloReturns, MonteCarloBaselineReturns, ValueNetworkReturns
+from returns import AbstractReturns, MonteCarloReturns, MonteCarloBaselineReturns
 from utils import ReplayBuffer
 
 
@@ -129,9 +121,12 @@ class REINFORCEAgent(PolicyGradientAgent):
         scores = []
         for episode in pbar:
             tau = self.playout()
+            self.G.update_baseline(tau)
+
             score = self.pi.compute_score(
                         tau,
-                        self.G(tau))
+                        self.G)
+
             self.pi.update_params(score)
 
             episode_rewards.append(sum(r for _,_, r, _ in tau))
@@ -158,7 +153,7 @@ class VanillaPolicyGradientAgent(PolicyGradientAgent):
         self.pi = policy_fn
         self.G = G
         if G is None:
-            self.G = R.MonteCarloReturns(self.gamma)
+            self.G = MonteCarloReturns(self.gamma)
 
     def train(self, n_iter):
         self.n_iter = n_iter
@@ -171,9 +166,9 @@ class VanillaPolicyGradientAgent(PolicyGradientAgent):
             batch_loss = 0
             for _ in range(self.batch_size):
                 tau = self.playout()
-                G_tau = self.G(tau)
-                batch_loss += self.pi.compute_score(tau, G_tau)
+                batch_loss += self.pi.compute_score(tau, self.G)
                 batch_reward += sum(r for _,_, r, _ in tau)
+            self.G.update_baseline(tau)
             self.pi.update_params(batch_loss)
 
             avg_batch_rewards.append(batch_reward/self.batch_size)
@@ -197,10 +192,10 @@ def plot_curves(rewards, loss):
     plt.tight_layout()
 
 if __name__ == '__main__':
-    env = gym.make("ALE/Pong")
-    # env = gym.make("CartPole-v1")
-    policy_fn = NNDiscretePolicyApproximator(env.observation_space, env.action_space, alpha=1e-2, from_image=True)
-    # policy_fn = LinearDiscretePolicyApproximator(env.observation_space, env.action_space, alpha=1e-2)
+    # env = gym.make("ALE/Pong")
+    env = gym.make("LunarLander-v2")
+    policy_fn = NNDiscretePolicyApproximator(env.observation_space, env.action_space, alpha=1e-3, from_image=False)
+    # policy_fn = LinearDiscretePolicyApproximator(env.observation_space, env.action_space, alpha=1e-3)
 
 
     agent = REINFORCEAgent(
@@ -214,11 +209,14 @@ if __name__ == '__main__':
     #             env=env,
     #             batch_size=4)
 
-    n_epochs = 20
+    n_epochs = 2 
     for e in range(n_epochs):
-        agent.train(2000)
+        agent.train(10000)
         plt.show()
         agent.playout(render=True)
+
+    with open(f'{env.unwrapped.spec.id}.pt', 'xw') as f:
+        torch.save(agent.pi, f)
 
     exit()
 

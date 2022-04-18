@@ -1,14 +1,14 @@
-from typing import List, Tuple, Any
 from abc import ABC, abstractmethod
-from multipledispatch import dispatch
+from typing import Tuple
 
-import torch
 import numpy as np
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.optim import SGD, Adam
+from torch.optim import Adam
 
 from cnn import CNN
+
 
 class AbstractPolicyApproximator(ABC):
     '''Abstract class to represent a stochastic policy function approximator.
@@ -96,8 +96,9 @@ class LinearDiscretePolicyApproximator(AbstractPolicyApproximator):
         '''computes score with respect to whole playout
         '''
 
+        score = 0
         for s_t, a_t, r, log_prob in tau:
-            score += self.compute_step_score(s_t, a_t, r, log_prob, G_tau[bytes(s_t)])
+            score += self.compute_step_score(s_t, a_t, r, log_prob, G_tau(s_t))
         return score
 
     def compute_step_score(self, s_t, a_t, r, log_prob, G):
@@ -150,20 +151,17 @@ class NNDiscretePolicyApproximator(AbstractPolicyApproximator, nn.Module):
         AbstractPolicyApproximator.__init__(self, state_space, action_space, alpha)
         nn.Module.__init__(self)
 
-        
-
         self.device = 'cpu'
         if torch.cuda.is_available():
             self.device = 'cuda'
 
-
         if from_image:
-            self.conv = CNN(state_space.shape).to(self.device)
+            self.conv = CNN(self.state_dim)
             self.layers = nn.Sequential(
                     self.conv,
                     nn.Linear(self.conv.output_size, hidden_size),
                     nn.ReLU(True),  
-                    nd.Linear(hidden_size, self.action_space),
+                    nn.Linear(hidden_size, self.action_space),
                     )
         else:
             self.state_dim = self.state_dim[0]
@@ -177,7 +175,7 @@ class NNDiscretePolicyApproximator(AbstractPolicyApproximator, nn.Module):
         self.to(self.device)
 
     def __call__(self, state: np.ndarray) -> Tuple[int, torch.tensor]:
-        probs = self.forward(state)
+        probs = self.forward(torch.tensor(state).unsqueeze(0))
         dist = torch.distributions.Categorical(probs)
         action = dist.sample()
         log_prob = dist.log_prob(action)
@@ -189,7 +187,7 @@ class NNDiscretePolicyApproximator(AbstractPolicyApproximator, nn.Module):
         '''
         scores = []
         for s_t, a_t, r, log_prob in tau:
-            score = -log_prob * G_tau[bytes(s_t)]
+            score = -log_prob * G_tau(s_t)
             scores.append(score.unsqueeze(0))
         return torch.cat(scores).sum()
 
@@ -210,8 +208,7 @@ class NNDiscretePolicyApproximator(AbstractPolicyApproximator, nn.Module):
         score.detach_().cpu()
 
     def forward(self, state):
-        state = torch.tensor(state, dtype=torch.float32, device=self.device)
-    
+        state = torch.tensor(state, dtype=torch.float32, device='cpu')
         x = self.layers(state)
         y = F.softmax(x, dim=-1).cpu()
         return y
