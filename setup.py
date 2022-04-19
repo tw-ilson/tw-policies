@@ -1,4 +1,5 @@
 from distutils.core import setup
+import os.path
 
 setup(
     name='sq_anyPG',
