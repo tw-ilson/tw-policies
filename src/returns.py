@@ -24,7 +24,7 @@ class AbstractReturns(ABC):
         pass
 
     @abstractmethod
-    def update_baseline(self, tau):
+    def update_baseline(self, playouts):
         """Update the baseline for the return function based on tau playouts data received.
         """
         pass
@@ -38,7 +38,7 @@ class MonteCarloReturns(AbstractReturns):
         self.gamma = gamma
         self.returns_dict = {}
 
-    def update_baseline(self, *playouts):
+    def update_baseline(self, playouts):
         '''based on a batch of playouts, calculates the average expected return from all states encountered (inefficient)
         '''
         avg_returns = {}
@@ -55,13 +55,13 @@ class MonteCarloReturns(AbstractReturns):
     def reward_to_go(self, tau):
         """ Given a single full playout, implements top-down dynamic programming to compute the return following from each state encountered in the trajectory
         """
-        trajectory = OrderedDict()
+        trajectory = {} 
         t = len(tau) - 1
-        s_t, a,  reward, log_prob = tau[-1]
+        s_t, a, reward = tau[-1]
         trajectory[bytes(s_t)] = reward
         while t > 0:
             t-=1
-            s_t, a, reward, log_prob = tau[t]
+            s_t, a, reward = tau[t]
             ret_tnext = trajectory[bytes(tau[t+1][0])]
             ret_t = reward + self.gamma * ret_tnext
             trajectory[bytes(s_t)] = ret_t
@@ -69,6 +69,7 @@ class MonteCarloReturns(AbstractReturns):
         return trajectory
 
     def __call__(self, state):
+        self.returns_dict.setdefault(bytes(state), 0)
         return self.returns_dict[bytes(state)]
 
 class MonteCarloBaselineReturns(MonteCarloReturns):
@@ -80,11 +81,25 @@ class MonteCarloBaselineReturns(MonteCarloReturns):
         super().__init__(gamma)
         self.baseline = baseline
 
-    def update_baseline(self, *playouts):
-        super().update_baseline(*playouts)
-        self.baseline.update_baseline(*playouts)
+    def update_baseline(self, playouts):
+        super().update_baseline(playouts)
+        self.baseline.update_baseline(playouts)
 
         self.returns_dict = {s: self.returns_dict[s] - self.baseline(s) for s in self.returns_dict}
+
+class TDMonteCarloReturns(MonteCarloBaselineReturns):
+    """ Monte Carlo returns baselined by the previous episode's returns
+    """
+    def __init__(self, gamma) -> None:
+        super().__init__(gamma, MonteCarloReturns(gamma))
+        self.prev = []
+
+    def update_baseline(self, playouts):
+        super().update_baseline(playouts)
+        self.baseline.update_baseline(self.prev)
+    
+        self.returns_dict = {s: self.returns_dict[s] - self.baseline(s) for s in self.returns_dict}
+        self.prev = playouts
 
 class ValueNetworkReturns(AbstractReturns, torch.nn.Module):
     def __init__(self, input_shape, alpha=1e-3, from_image=False) -> None:
@@ -93,8 +108,7 @@ class ValueNetworkReturns(AbstractReturns, torch.nn.Module):
         Args:
             cnn: the feature extractor to apply to the image
             input_shape (tuple, optional): Shape of the image (C, H, W). Should be square.
-            NOTES: have 2 predictions of direct joint values: (base and gripper), two predictions
-            of combinations of motors: (forward z values, and vertical position adjust)
+            NOTE: if from image, it is better to construct value network and policy with the same feature extractor
         """
         super().__init__()
         # (B, C, H, W)
