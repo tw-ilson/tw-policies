@@ -10,7 +10,7 @@ from torch.optim import Adam
 from cnn import CNN
 
 
-class AbstractPolicyApproximator(ABC):
+class AbstractPolicy(ABC):
     '''Abstract class to represent a stochastic policy function approximator.
     '''
 
@@ -51,7 +51,7 @@ class AbstractPolicyApproximator(ABC):
         '''
         pass
 
-class LinearDiscretePolicyApproximator(AbstractPolicyApproximator):
+class LinearDiscretePolicy(AbstractPolicy):
     '''Approximates a policy using a Linear combination of the features of the state'''
 
     def __init__(self, state_dim, action_space, alpha) -> None:
@@ -137,7 +137,7 @@ class LinearDiscretePolicyApproximator(AbstractPolicyApproximator):
         return self.weights
     
 
-class NNDiscretePolicyApproximator(AbstractPolicyApproximator, nn.Module):
+class NNDiscretePolicy(AbstractPolicy, nn.Module):
     '''Neural Network approximator for a categorical policy distribution.
     '''
 
@@ -148,7 +148,7 @@ class NNDiscretePolicyApproximator(AbstractPolicyApproximator, nn.Module):
             alpha:float=1e-3,
             from_image:bool=False):
 
-        AbstractPolicyApproximator.__init__(self, state_space, action_space, alpha)
+        AbstractPolicy.__init__(self, state_space, action_space, alpha)
         nn.Module.__init__(self)
 
         self.device = 'cpu'
@@ -216,7 +216,7 @@ class NNDiscretePolicyApproximator(AbstractPolicyApproximator, nn.Module):
     def get_params(self):
         return self.parameters()
 
-class NNGaussianPolicyApproximator(AbstractPolicyApproximator, nn.Module):
+class NNGaussianPolicy(AbstractPolicy, nn.Module):
     '''Neural Network approximator for a continuous policy distribution.
     '''
 
@@ -227,7 +227,7 @@ class NNGaussianPolicyApproximator(AbstractPolicyApproximator, nn.Module):
             alpha:float=1e-3,
             from_image:bool=False):
 
-        AbstractPolicyApproximator.__init__(self, state_space, action_space, alpha)
+        AbstractPolicy.__init__(self, state_space, action_space, alpha)
         nn.Module.__init__(self)
 
         if not from_image:

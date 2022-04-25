@@ -23,7 +23,7 @@ if SDL_SUPPORT:
     ale.setBool("display_screen", True)
 
 
-from policy_functions import NNDiscretePolicyApproximator, LinearDiscretePolicyApproximator
+from policy_functions import NNDiscretePolicy, LinearDiscretePolicy
 from returns import AbstractReturns, MonteCarloReturns, MonteCarloBaselineReturns
 from utils import ReplayBuffer
 
@@ -120,7 +120,7 @@ class REINFORCEAgent(PolicyGradientAgent):
         episode_rewards = []
         scores = []
         for episode in pbar:
-            tau = self.playout()
+            tau = self.playout(render=True)
             self.G.update_baseline(tau)
 
             score = self.pi.compute_score(
@@ -194,8 +194,8 @@ def plot_curves(rewards, loss):
 if __name__ == '__main__':
     # env = gym.make("ALE/Pong")
     env = gym.make("LunarLander-v2")
-    policy_fn = NNDiscretePolicyApproximator(env.observation_space, env.action_space, alpha=1e-3, from_image=False)
-    # policy_fn = LinearDiscretePolicyApproximator(env.observation_space, env.action_space, alpha=1e-3)
+    policy_fn = NNDiscretePolicy(env.observation_space, env.action_space, alpha=1e-3, from_image=False)
+    # policy_fn = LinearDiscretePolicy(env.observation_space, env.action_space, alpha=1e-3)
 
 
     agent = REINFORCEAgent(
