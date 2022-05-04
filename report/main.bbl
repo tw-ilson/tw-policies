@@ -1,0 +1,137 @@
+\begin{thebibliography}{}
+
+\bibitem [\protect \citeauthoryear {%
+Karpathy%
+}{%
+Karpathy%
+}{%
+{\protect \APACyear {2016}}%
+}]{%
+karpathypongfrompixels}
+\APACinsertmetastar {%
+karpathypongfrompixels}%
+\begin{APACrefauthors}%
+Karpathy, A.%
+\end{APACrefauthors}%
+\unskip\
+\newblock
+\APACrefYearMonthDay{2016}{May 31}{}.
+\newblock
+\APACrefbtitle {Deep Reinforcement Learning: Pong from Pixels.} {Deep
+  reinforcement learning: Pong from pixels.}
+\newblock
+\APAChowpublished {Andrej Karpathy blog}.
+\newblock
+\begin{APACrefURL} \url{https://karpathy.github.io/2016/05/31/rl/}
+  \end{APACrefURL}
+\PrintBackRefs{\CurrentBib}
+
+\bibitem [\protect \citeauthoryear {%
+Lillicrap%
+\ \protect \BOthers {.}}{%
+Lillicrap%
+\ \protect \BOthers {.}}{%
+{\protect \APACyear {2015}}%
+}]{%
+lillicrap2015continuous}
+\APACinsertmetastar {%
+lillicrap2015continuous}%
+\begin{APACrefauthors}%
+Lillicrap, T\BPBI P.%
+, Hunt, J\BPBI J.%
+, Pritzel, A.%
+, Heess, N.%
+, Erez, T.%
+, Tassa, Y.%
+\BDBL {}Wierstra, D.%
+\end{APACrefauthors}%
+\unskip\
+\newblock
+\APACrefYearMonthDay{2015}{}{}.
+\newblock
+{\BBOQ}\APACrefatitle {Continuous control with deep reinforcement learning}
+  {Continuous control with deep reinforcement learning}.{\BBCQ}
+\newblock
+\APACjournalVolNumPages{arXiv preprint arXiv:1509.02971}{}{}{}.
+\PrintBackRefs{\CurrentBib}
+
+\bibitem [\protect \citeauthoryear {%
+Silver%
+\ \protect \BOthers {.}}{%
+Silver%
+\ \protect \BOthers {.}}{%
+{\protect \APACyear {2014}}%
+}]{%
+silver2014deterministic}
+\APACinsertmetastar {%
+silver2014deterministic}%
+\begin{APACrefauthors}%
+Silver, D.%
+, Lever, G.%
+, Heess, N.%
+, Degris, T.%
+, Wierstra, D.%
+\BCBL {}\ \BBA {} Riedmiller, M.%
+\end{APACrefauthors}%
+\unskip\
+\newblock
+\APACrefYearMonthDay{2014}{}{}.
+\newblock
+{\BBOQ}\APACrefatitle {Deterministic policy gradient algorithms} {Deterministic
+  policy gradient algorithms}.{\BBCQ}
+\newblock
+\BIn{} \APACrefbtitle {International conference on machine learning}
+  {International conference on machine learning}\ (\BPGS\ 387--395).
+\PrintBackRefs{\CurrentBib}
+
+\bibitem [\protect \citeauthoryear {%
+Sutton%
+\ \BBA {} Barto%
+}{%
+Sutton%
+\ \BBA {} Barto%
+}{%
+{\protect \APACyear {2018}}%
+}]{%
+sutton2018reinforcement}
+\APACinsertmetastar {%
+sutton2018reinforcement}%
+\begin{APACrefauthors}%
+Sutton, R\BPBI S.%
+\BCBT {}\ \BBA {} Barto, A\BPBI G.%
+\end{APACrefauthors}%
+\unskip\
+\newblock
+\APACrefYear{2018}.
+\newblock
+\APACrefbtitle {Reinforcement learning: An introduction} {Reinforcement
+  learning: An introduction}.
+\newblock
+\APACaddressPublisher{}{MIT press}.
+\PrintBackRefs{\CurrentBib}
+
+\bibitem [\protect \citeauthoryear {%
+Williams%
+}{%
+Williams%
+}{%
+{\protect \APACyear {1992}}%
+}]{%
+williams1992simple}
+\APACinsertmetastar {%
+williams1992simple}%
+\begin{APACrefauthors}%
+Williams, R\BPBI J.%
+\end{APACrefauthors}%
+\unskip\
+\newblock
+\APACrefYearMonthDay{1992}{}{}.
+\newblock
+{\BBOQ}\APACrefatitle {Simple statistical gradient-following algorithms for
+  connectionist reinforcement learning} {Simple statistical gradient-following
+  algorithms for connectionist reinforcement learning}.{\BBCQ}
+\newblock
+\APACjournalVolNumPages{Machine learning}{8}{3}{229--256}.
+\PrintBackRefs{\CurrentBib}
+
+\end{thebibliography}

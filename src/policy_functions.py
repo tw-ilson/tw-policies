@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Tuple
 
+import gym.spaces.utils
 import numpy as np
 import torch
 import torch.nn as nn
@@ -8,16 +9,24 @@ import torch.nn.functional as F
 from torch.optim import Adam
 
 from cnn import CNN
+from utils import logsumexp, prepare_batch
 
-
-class AbstractPolicyApproximator(ABC):
+class AbstractPolicy(ABC):
     '''Abstract class to represent a stochastic policy function approximator.
     '''
 
-    def __init__(self, state_dim, action_space, alpha) -> None:
-        self.state_dim = state_dim.shape
-        self.action_space = action_space.n
-        self.alpha = alpha
+    def __init__(self, state_space, action_space, alpha) -> None:
+        print(f"State space: {state_space}\nAction space: {action_space}")
+        self.state_space = state_space
+        self.state_dim = gym.spaces.utils.flatdim(state_space)
+        self.action_space = action_space
+        self.action_dim = gym.spaces.utils.flatdim(action_space)
+        self.alpha = alpha 
+
+    @abstractmethod
+    def pdf(self, state):
+        '''Returns the log probability density function of this policy distribution
+        '''
         pass
 
     @abstractmethod
@@ -25,119 +34,163 @@ class AbstractPolicyApproximator(ABC):
         pass
 
     @abstractmethod
-    def compute_score(self, tau):
-        ''' Given a full playout of this policy, computes the score sum for the loss output of the policy approximation
+    def score(s, a, v):
+        ''' Given a full batch of transition using this policy, computes the expectation of the score gradient scaled by the advantage
+        Params
+        ------
+            s: states (array-like)
+            a: actions (array-like)
+            v: value/advantages (array-like)
+
         '''
         pass
 
     @abstractmethod
-    def compute_step_score(self, s_t, a_t, r, log_prob, G):
-        ''' Given a full playout of this policy, computes the score sum for the loss output of the policy approximation
-        '''
-        pass
-
-    @abstractmethod
-    def update_params(self, score):
+    def optimize(self, score) -> None:
         '''  Performs backwards pass to updates network parameters according to score calculation.
         Params
         ------
             score: the 'score function' as described in PG literature, typically computed using log probability of action scaled by 
-    '''
+            advantage: the advantage of the state or sequence from which the score was computed.
+        '''
         pass
 
     @abstractmethod
-    def __call__(self, state:np.ndarray) -> np.ndarray:
+    def __call__(self, state:np.ndarray):
         '''Given a state, return an action and an approximation of the log probability vector of the action space distribution
         '''
         pass
 
-class LinearDiscretePolicyApproximator(AbstractPolicyApproximator):
+class LinearDiscretePolicy(AbstractPolicy):
     '''Approximates a policy using a Linear combination of the features of the state'''
 
     def __init__(self, state_dim, action_space, alpha) -> None:
         super().__init__(state_dim, action_space, alpha)
-        self.state_dim = self.state_dim[0]
+        self.state_dim = self.state_dim
 
         #initialize weights matrix, single fully connected layer, no bias 
-        self.weights = np.random.uniform(0, 1, size=(self.action_space, self.state_dim)).astype(np.float64)
+        self.weights = np.random.uniform(0, 1, size=(self.action_dim, self.state_dim)).astype(np.float64)
+        self.d_weights = self.weights.T.copy() * 0
 
-        self.d_weights = np.zeros((self.state_dim, self.action_space))
-        
+    def pdf(self, state):
+        ''' The Log-Softmax produces categorical distribution
+        '''
+        x = self.forward(state)
+        assert not all(i == 0 for i in x)
+        log_probs = x - logsumexp(x)
+        return log_probs
     
     def forward(self, state):
         #Dense linear combination of state features
-        hs = np.dot(self.weights, state)
+        return np.dot(self.weights, state)
 
-        #SoftMax following output layer; numerically stable
-        def log_softmax(x):
-            assert not all(i == 0 for i in x)
-            max_x = np.max(x)
-            log_probs = x - max_x - np.log(np.sum(np.exp(x - max_x)))
-            return log_probs
+    def __call__(self, state: np.ndarray):
 
-        #take the softmax function over hidden states
-        log_probs = log_softmax(hs)
-
-        return log_probs
-
-    def __call__(self, state: np.ndarray) -> Tuple[int, np.ndarray]:
-
-        log_probs = self.forward(state)
+        log_probs = self.pdf(state)
 
         #convert back from log space to discrete categorical using Gumbel-max trick:
-        g = np.random.gumbel(0, .99, size=self.action_space)
+        g = np.random.gumbel(0, .99, size=self.action_dim)
         action = np.argmax(log_probs + g) #sample
-        # probs = np.exp(log_probs)
-        # action = np.random.choice(range(self.action_space), p=probs)
 
-        return action, log_probs[action] - 1e-9 #add small value so no zero divide
+        return action
 
-    def compute_score(self, tau, G_tau):
-        '''computes score with respect to whole playout
-        '''
-
-        score = 0
-        for s_t, a_t, r, log_prob in tau:
-            score += self.compute_step_score(s_t, a_t, r, log_prob, G_tau(s_t))
-        return score
-
-    def compute_step_score(self, s_t, a_t, r, log_prob, G):
+    def score(self, s, a, v):
             ''' In this version of the implementation, computes the gradient wrt to the output of the softmax function, 
                 which follows a single linear combination layer of the state input.
             '''
-            sm_probs = self.forward(s_t)
+            def step_score(s_t, a_t):
+                assert len(s_t) == self.state_dim
+                sm_probs = self.pdf(s_t)
+                
+                #one-hot encode action
+                act_mask = np.zeros(self.action_dim)
+                act_mask[a_t] = 1
 
-            #one-hot encode action
-            act_mask = np.zeros(self.action_space)
-            act_mask[a_t] = 1
+                phi = np.outer(s_t, np.ones(self.action_dim))
+                return phi - np.nan_to_num(
+                        np.outer(s_t, np.exp(sm_probs * act_mask)))
 
-            #the score computation
-            score = -log_prob * G
-
-            #The components of the gradient via chain rule
-            SM =  sm_probs.reshape((-1,1))
-            Jsm_dh = np.diagflat(sm_probs) - np.dot(SM, SM.T)
-            dh_dw = s_t
-
-            #gradient descent step 
-            dL_dh = G * np.dot(Jsm_dh, act_mask) / score
-            self.d_weights += np.outer(dh_dw, dL_dh)
-
-            assert not np.isnan(self.d_weights).any()
+            score = np.sum([v_t * step_score(s_t, a_t) for s_t, a_t, v_t in zip(s, a, v)], axis=0)
             return score
 
 
-    def update_params(self, score):
+    def optimize(self, score):
         #optimize using computed gradients
         
-        self.weights = self.weights + self.alpha * self.d_weights.T
-        self.d_weights = np.zeros((self.state_dim, self.action_space))
+        self.weights = self.weights + self.alpha * score.T
+        self.d_weights = np.zeros((self.state_dim, self.action_dim))
 
     def get_params(self):
         return self.weights
     
+class LinearGaussianPolicy(AbstractPolicy):
+    '''Approximates a continuous policy using a Linear combination of the features of the state. Predicts a mean and standard deviation for each factor of the action space.
+    '''
+    def __init__(self, state_space, action_space, alpha) -> None:
+        super().__init__(state_space, action_space, alpha)
+        assert isinstance(state_space, gym.spaces.Box)
 
-class NNDiscretePolicyApproximator(AbstractPolicyApproximator, nn.Module):
+        self.mu_weight = np.random.uniform(-1, 1, size=(self.action_dim, self.state_dim))
+        self.sd_weight = np.ones(self.action_dim)
+
+        # self.d_mu_weight = self.mu_weight.T.copy() * 0
+        # self.d_sd_weight = self.sd_weight.T.copy() * 0
+
+        self.EPS = 1e-6
+    
+    def forward(self, state):
+        #Dense linear combination of state features
+        mu = np.dot(self.mu_weight, state)
+
+        #log-sd is based on pure weights
+        sd = np.exp(self.sd_weight) #- logsumexp(self.sd_weight))
+        sd = np.clip(sd, self.EPS, 2)
+
+        return mu, sd
+
+    def pdf(self, state):
+        '''The gaussian log-probability density calculation
+        '''
+        mu, sd = self.forward(state)
+        log_probs = lambda x: -0.5 * (x - mu)/sd**2 - np.log(sd * (2 * np.pi)**(0.5))
+        return log_probs
+
+    def __call__(self, state: np.ndarray):
+        #sample randomly from gaussian distribution
+        mu, sd = self.forward(state)
+        dev = np.random.multivariate_normal(mu, np.diag(sd))
+
+        act = mu + dev
+        
+        assert len(act) == self.action_dim
+        return act
+
+    def score(self, s, a, v):
+        ''' In this version of the implementation, computes the gradient wrt to the output of the softmax function, 
+            which follows a single linear combination layer of the state input.
+        '''
+        def step_score(s_t, a_t, v_t):
+            mu, sd = self.forward(s_t)
+
+            mu_grad = v_t * np.outer(s_t, (a_t - mu))/(sd**2)
+            sd_grad = ((a_t - mu)**2 - sd**2)/ sd**3
+            return np.array([mu_grad, sd_grad])
+        
+        scores = np.array([step_score(s_t, a_t, v_t) for s_t, a_t, v_t in zip(s, a, v)])
+        return np.mean(scores[:, 0], axis=0), np.mean(scores[:, 1], axis=0)
+
+    def optimize(self, score):
+        #optimize using computed gradients
+        self.mu_weight = self.mu_weight + self.alpha * score[0].T
+        self.sd_weight = self.sd_weight + self.alpha * score[1]
+
+        self.mu_weight = np.nan_to_num(self.mu_weight)
+        self.sd_weight = np.nan_to_num(self.sd_weight)
+
+    def get_params(self):
+        return [self.mu_weight, self.sd_weight]
+
+class NNDiscretePolicy(AbstractPolicy, nn.Module):
     '''Neural Network approximator for a categorical policy distribution.
     '''
 
@@ -148,125 +201,139 @@ class NNDiscretePolicyApproximator(AbstractPolicyApproximator, nn.Module):
             alpha:float=1e-3,
             from_image:bool=False):
 
-        AbstractPolicyApproximator.__init__(self, state_space, action_space, alpha)
+        AbstractPolicy.__init__(self, state_space, action_space, alpha)
         nn.Module.__init__(self)
 
-        self.device = 'cpu'
-        if torch.cuda.is_available():
-            self.device = 'cuda'
-
         if from_image:
+            self.state_dim = self.state_space.shape
             self.conv = CNN(self.state_dim)
             self.layers = nn.Sequential(
                     self.conv,
                     nn.Linear(self.conv.output_size, hidden_size),
                     nn.ReLU(True),  
-                    nn.Linear(hidden_size, self.action_space),
+                    nn.Linear(hidden_size, self.action_dim),
                     )
         else:
-            self.state_dim = self.state_dim[0]
             self.layers = nn.Sequential(
                     nn.Linear(self.state_dim, hidden_size),
                     nn.ReLU(True),  
-                    nn.Linear(hidden_size, self.action_space),
+                    nn.Linear(hidden_size, self.action_dim),
                     )
 
         self.optim = Adam(self.get_params(), lr=self.alpha )
-        self.to(self.device)
 
-    def __call__(self, state: np.ndarray) -> Tuple[int, torch.tensor]:
-        probs = self.forward(torch.tensor(state).unsqueeze(0))
+    def pdf(self, state):
+        probs = self.forward(state)
         dist = torch.distributions.Categorical(probs)
-        action = dist.sample()
-        log_prob = dist.log_prob(action)
-        # print(type(log_prob))
-        return action.item(), log_prob
-        
-    def compute_score(self, tau, G_tau):
-        ''' Computes the score function of the policy gradient with respect to the loss output of this neural Network; 
-        '''
-        scores = []
-        for s_t, a_t, r, log_prob in tau:
-            score = -log_prob * G_tau(s_t)
-            scores.append(score.unsqueeze(0))
-        return torch.cat(scores).sum()
+        return dist
 
-    def compute_step_score(self, s_t, a_t, r, log_prob, G):
+    def __call__(self, state: np.ndarray):
+        dist = self.pdf(state)
+        action = dist.rsample()
+        return action.item()
+        
+    def score(self, s, a, v):
         ''' Computes the score function of the policy gradient with respect to the loss output of this neural Network; 
         '''
-        return -log_prob * G
+        s, a, v = prepare_batch(s, a, v)
+        v = torch.tensor(v)
+        dist = self.pdf(s)
+        return torch.mean(-dist.log_prob(torch.tensor(a)) * v)
     
-    def update_params(self, score):
+    def optimize(self, score):
         '''updates network parameters according to score calculation.
         '''
-        score.to(self.device)
-        self.optim.zero_grad()
         score.backward(retain_graph=True)
+        #scale gradient by advantage 
         self.optim.step()
-
-        #inplace detach so we can plot this
-        score.detach_().cpu()
+        self.optim.zero_grad()
+        score.detach_()
 
     def forward(self, state):
-        state = torch.tensor(state, dtype=torch.float32, device='cpu')
-        x = self.layers(state)
-        y = F.softmax(x, dim=-1).cpu()
+
+        x = self.layers(torch.FloatTensor(state))
+        y = F.softmax(x, dim=-1)
         return y
 
     def get_params(self):
         return self.parameters()
 
-class NNGaussianPolicyApproximator(AbstractPolicyApproximator, nn.Module):
+class NNGaussianPolicy(AbstractPolicy, nn.Module):
     '''Neural Network approximator for a continuous policy distribution.
     '''
 
     def __init__(self,
             state_space,
             action_space,
-            hidden_size=32, 
+            hidden_size=64, 
             alpha:float=1e-3,
             from_image:bool=False):
 
-        AbstractPolicyApproximator.__init__(self, state_space, action_space, alpha)
+        AbstractPolicy.__init__(self, state_space, action_space, alpha)
         nn.Module.__init__(self)
 
-        if not from_image:
-            self.layers = nn.Sequential(
+        if from_image:
+            self.state_dim = self.state_space.shape
+            self.conv = CNN(self.state_dim)
+            self.mu = nn.Sequential(
+                    self.conv,
+                    nn.Linear(self.conv.output_size, hidden_size),
+                    nn.ReLU(True),  
+                    nn.Linear(hidden_size, self.action_dim),
+                    )
+        else:
+            self.mu = nn.Sequential(
                     nn.Linear(self.state_dim, hidden_size),
                     nn.ReLU(True),  
-                    nn.Linear(hidden_size, 2)
-                )
-        else:
-            # self.layers.append(CNN())
-            raise NotImplemented
+                    nn.Linear(hidden_size, self.action_dim)
+                    )
 
-        self.optim = Adam(self.get_params(), lr=self.alpha )
+        # self.sigma = nn.Linear(hidden_size, self.action_dim)
+        self.sigma = torch.ones(self.action_dim, dtype=torch.float32, requires_grad=True)
 
-    def __call__(self, state: np.ndarray) -> Tuple[int, torch.tensor]:
-        probs = self.forward(state)
-        dist = torch.distributions.Categorical(probs)
-        action = dist.sample()
-        return action.item(), dist.log_prob(action)
-        
-    def compute_score(self, s_t, a_t, log_prob, advantage):
-        ''' Computes the score function of the policy gradient with respect to the loss output of this neural Network; 
-        '''
-        score = -log_prob * advantage
-        # print(score)
-        return score.unsqueeze(0)
+        self.optim = Adam(list(self.get_params()) + [self.sigma], lr=self.alpha )
+
+    def pdf(self, state):
+        mu, sd = self.forward(torch.tensor(state))
+        dist = torch.distributions.Normal(mu, sd)
+        return dist
+
+    def __call__(self, state: np.ndarray):
+        dist = self.pdf(state)
+        action = dist.rsample()
+        return action.detach().numpy()
     
-    def update_params(self, scores):
+    def score(self, s, a, v):
+        ''' Computes the score function of the policy gradient with respect to the parameters
+        '''
+        states, actions, values = prepare_batch(s, a, v)
+        dist = self.pdf(states)
+        return torch.mean(-dist.log_prob(actions) * values)
+    
+    def optimize(self, score):
         '''updates network parameters according to score calculation.
         '''
-        score = torch.cat(scores).sum()
-        self.optim.zero_grad()
         score.backward(retain_graph=True)
         self.optim.step()
-        
+        self.optim.zero_grad()
+        score.detach_()
 
     def forward(self, state):
-        x = self.layers(torch.FloatTensor(state))
-        return 
+        EPS = 1e-6
+        MAX = 3
+        return self.mu(torch.FloatTensor(state)), torch.clip(torch.exp(self.sigma), EPS, MAX)
 
     def get_params(self):
         return self.parameters()
+
+if __name__ == '__main__':
+    import gym
+    env = gym.make('LunarLanderContinuous-v2')
+    # env = gym.make('Pendulum-v1')
+    env.reset()
+    pol = LinearDiscretePolicy(env.observation_space, env.action_space, 1e-3)
+    s = np.ones((10, pol.state_dim))
+    a = np.ones(10, dtype=int)
+    r = np.ones(10)
+    print(pol.score(s, a, r))
+
