@@ -1,4 +1,4 @@
-from typing import List, Tuple, Callable, Any
+from typing import ( TYPE_CHECKING, List, Tuple, Callable, Any )
 from collections import OrderedDict
 import sys
 import os
@@ -15,19 +15,27 @@ import pickle
 
 # from ale_py import ALEInterface, SDL_SUPPORT
 
-
 # ale = ALEInterface()
 # ale.loadROM(Pong)
 # # Check if we can display the screen
 # if SDL_SUPPORT:
 #     ale.setBool("sound", True)
 #     ale.setBool("display_screen", True)
-#
+
+# ENV = gym.make("ALE/Pong")
+# ENV = gym.make("LunarLander-v2")
+# ENV = gym.make('CarRacing-v1')
+# ENV = gym.make('LunarLanderContinuous-v2')
+# ENV = gym.make('MountainCarContinuous-v0')
+ENV = gym.make('CartPole-v1')
+# ENV = gym.make('Pendulum-v1')
 
 from policy_functions import *
 from value_functions import *
 from utils import *
 
+if torch.cuda.is_available():
+    torch.device = 'cuda'
 
 class PolicyGradientAgent():
     ''' Abstract class defining general properties and utilities for policy gradient reinforcement learning algorithms
@@ -45,7 +53,7 @@ class PolicyGradientAgent():
 
     def __init__(self,
             gamma:float=0.98,
-            env:gym.Env=None) -> None:
+            env=gym.Env) -> None:
 
         self.env = env  
         self.gamma = gamma
@@ -224,22 +232,14 @@ class ActorCriticAgent(PolicyGradientAgent):
             pass
 
 if __name__ == '__main__':
-    # env = gym.make("ALE/Pong")
-    # env = gym.make("LunarLander-v2")
-    # env = gym.make('CartPole-v1')
-    env = gym.make('Pendulum-v1')
-    # env = gym.make('CarRacing-v1')
-    # env = gym.make('LunarLanderContinuous-v2')
-    # env = gym.make('MountainCarContinuous-v0')
+    # actor_fn = NNDiscretePolicy(ENV.observation_space, ENV.action_space, hidden_size=16, alpha=1e-3)
+    # actor_fn = NNGaussianPolicy(ENV.observation_space, ENV.action_space, alpha=1e-2)
+    actor_fn = LinearDiscretePolicy(ENV.observation_space, ENV.action_space, alpha=1e-2)
+    # actor_fn = LinearGaussianPolicy(ENV.observation_space, ENV.action_space, alpha=1e-2)
 
-    # actor_fn = NNDiscretePolicy(env.observation_space, env.action_space, hidden_size=16, alpha=1e-3)
-    actor_fn = NNGaussianPolicy(env.observation_space, env.action_space, alpha=1e-2)
-    # actor_fn = LinearDiscretePolicy(env.observation_space, env.action_space, alpha=1e-2)
-    # actor_fn = LinearGaussianPolicy(env.observation_space, env.action_space, alpha=1e-2)
-
-    agent = BatchREINFORCEAgent(
+    agent = REINFORCEAgent(
                 policy_fn=actor_fn,
-                env=env,
+                env=ENV,
                 gamma=0.98,
                 )
 
@@ -248,7 +248,3 @@ if __name__ == '__main__':
         agent.train(800)
         plt.show()
         agent.playout(render=True)
-    
-
-    exit()
-

@@ -100,11 +100,12 @@ class LinearDiscretePolicy(AbstractPolicy):
             '''
             def step_score(s_t, a_t):
                 assert len(s_t) == self.state_dim
+
                 sm_probs = self.pdf(s_t)
                 
                 #one-hot encode action
                 act_mask = np.zeros(self.action_dim)
-                act_mask[a_t] = 1
+                act_mask[int(a_t)] = 1
 
                 phi = np.outer(s_t, np.ones(self.action_dim))
                 return phi - np.nan_to_num(
