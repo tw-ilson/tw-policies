@@ -9,7 +9,7 @@ class LinearGaussianPolicy(AbstractPolicy):
     '''
     def __init__(self, state_space, action_space, alpha) -> None:
         super().__init__(state_space, action_space, alpha)
-        assert isinstance(state_space, gym.spaces.Box)
+        assert not isinstance(self.env.action_space, gym.spaces.Discrete), 'Discrete action space cannot be continuous'
 
         self.mu_weight = np.random.uniform(-1, 1, size=(self.action_dim, self.state_dim))
         self.sd_weight = np.ones(self.action_dim)
@@ -84,6 +84,8 @@ class NNGaussianPolicy(AbstractPolicy, nn.Module):
 
         AbstractPolicy.__init__(self, state_space, action_space, alpha)
         nn.Module.__init__(self)
+        assert not isinstance(action_space, gym.spaces.Discrete), 'Discrete action space cannot be continuous'
+
 
         if from_image:
             self.state_dim = self.state_space.shape

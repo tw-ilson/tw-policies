@@ -1,15 +1,27 @@
 from typing import Tuple
 import matplotlib.pyplot as plt
 import torch
-
 import numpy as np
+import gymnasium as gym
+from gymnasium.spaces.utils import flatten
+
+# TODO: make utilities for converting a Box action space to a set of Discrete actions
+
+def action_mask(a_t, action_dim):
+    '''Discrete actions spaces only. Works with batch
+    '''
+    a_t = np.asarray(a_t, dtype=int)
+    nbatch = a_t.shape[0]
+    mask = np.zeros((nbatch, action_dim))
+    mask[np.arange(nbatch), a_t] = 1
+    return mask
 
 def prepare_batch(states, actions, values, device='cpu'):
     '''Convert lists representing batch of transitions into pytorch tensors
     '''
-    states = torch.tensor(np.array(states), dtype=torch.float32, device=device)
-    actions = torch.tensor(np.array(actions), dtype=torch.float32, device=device)
-    values = torch.tensor(np.array(values), dtype=torch.float32, device=device)
+    states = torch.as_tensor(states, dtype=torch.float32, device=device)
+    actions = torch.as_tensor(actions, dtype=torch.float32, device=device)
+    values = torch.as_tensor(values, dtype=torch.float32, device=device)
     return states, actions, values
 
 def logsumexp(x):
@@ -20,9 +32,9 @@ def logsumexp(x):
 
 def plot_curves(**curves):
     print(len(curves))
-    f, axs = plt.subplots(1, len(curves), figsize=(7,2.5))
+    f, axs = plt.subplots(len(curves), 1, figsize=(7,2.5))
     # axs = [axs] if not isinstance(axs, list) else axs
-    plt.subplots_adjust(wspace=0.3)
+    plt.subplots_adjust(hspace=0.3)
     W = 12 # smoothing window
 
     [a.clear() for a in axs]

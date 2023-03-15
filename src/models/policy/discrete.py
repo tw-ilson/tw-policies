@@ -1,9 +1,10 @@
 import numpy as np
+from models.feedforward import FeedForward
 import torch
 from torch import nn
 from models.policy import AbstractPolicy
 from models.cnn import CNN
-from utils import logsumexp, prepare_batch
+from utils import logsumexp, prepare_batch, action_mask
 
 class LinearDiscretePolicy(AbstractPolicy):
     '''Approximates a policy using a Linear combination of the features of the state'''
@@ -60,8 +61,8 @@ class LinearDiscretePolicy(AbstractPolicy):
     def optimize(self, score):
         #optimize using computed gradients
         
-        self.weights = self.weights + self.alpha * score.T
-        self.d_weights = np.zeros((self.state_dim, self.action_dim))
+        self.weights = self.weights + self.lr * score.T
+        # self.d_weights = np.zeros((self.state_dim, self.action_dim))
 
     def get_params(self):
         return self.weights
@@ -73,8 +74,10 @@ class NNDiscretePolicy(AbstractPolicy, nn.Module):
     def __init__(self,
             state_space,
             action_space,
-            hidden_size=64, 
+            n_hidden=1,
+            hidden_size=32, 
             alpha:float=1e-3,
+            dropout:float=0.2
             ):
 
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -82,61 +85,51 @@ class NNDiscretePolicy(AbstractPolicy, nn.Module):
         AbstractPolicy.__init__(self, state_space, action_space, alpha)
         nn.Module.__init__(self)
 
-        # if from_image:
-        #     self.state_dim = self.state_space.shape
-        #     self.conv = CNN(self.state_dim)
-        #     self.layers = nn.Sequential(
-        #             self.conv,
-        #             nn.Linear(self.conv.output_size, hidden_size),
-        #             nn.Dropout(0.6), # To help normalize, prevent redundancy
-        #             nn.ReLU(True),  
-        #             nn.Linear(hidden_size, self.action_dim),
-        #             )
-        # else:
-        self.layers = nn.Sequential(
-                nn.Linear(self.state_dim, hidden_size),
-                nn.Dropout(0.6), # To help normalize, prevent redundancy
-                nn.ReLU(True), 
-                nn.Linear(hidden_size, self.action_dim),
-                )
+        self.layers = FeedForward(
+                self.state_dim,
+                self.action_dim,
+                n_hidden=n_hidden,
+                d_hidden=hidden_size)
 
         #include some very small noise
-        self.epsilon = np.finfo(np.float32).eps.item()
+        #self.epsilon = np.finfo(np.float32).eps.item()
 
-        self.optim = torch.optim.Adam(self.get_params(), lr=self.alpha)
+        self.optim = torch.optim.SGD(self.get_params(), lr=self.lr)
         self.to(self.device)
 
     def forward(self, state):
         s = torch.tensor(state, dtype=torch.float32, device=self.device)
+        assert not torch.isnan(s).any()
         x = self.layers(s)
-        y = nn.functional.softmax(x, dim=-1)
+        y = nn.functional.log_softmax(x, dim=-1)
         return y
 
     def pdf(self, state):
+        # print(state.shape)
         probs = self.forward(state)
         dist = torch.distributions.Categorical(probs)
         return dist
 
     def __call__(self, state: np.ndarray):
         dist = self.pdf(state)
-        action = dist.sample()
-        return action.item()
+        action = dist.sample().item()
+        return action
         
-    def score(self, s, a, v):
+    def score(self, s, a, r):
         ''' Computes the score function of the policy gradient with respect to the loss output of this neural Network; 
         '''
-        s, a, v = prepare_batch(s, a, v, device=self.device)
+        s, a, r = prepare_batch(s, a, r, device=self.device)
         #v = v.clone().detach()
         dist = self.pdf(s)
-        return torch.mean(-dist.log_prob(a) * v)
+        return torch.sum(-dist.log_prob(a) * r)
     
     def optimize(self, score):
         '''updates network parameters according to score calculation.
         '''
         score.backward(retain_graph=True)
         #scale gradient by advantage 
-        # self.optim.step()
-        # self.optim.zero_grad()
+        self.optim.step()
+        self.optim.zero_grad()
         score.detach_()
 
     def get_params(self):
