@@ -3,13 +3,16 @@ import gymnasium as gym
 import torch
 from agents.actorcritic import ActorCriticAgent
 
-from models.returns.valuenetwork import QValueNetworkReturns
 
 #this needs to go up here
 if torch.cuda.is_available():
     torch.cuda.init()
 
-from models.policy import (AbstractPolicy, LinearDiscretePolicy, LinearGaussianPolicy, NNDiscretePolicy)
+from models.policy import AbstractPolicy
+from models.policy import (LinearDiscretePolicy, LinearGaussianPolicy, NNDiscretePolicy)
+from src.models.policy.continuous import NNGaussianPolicy
+from models.returns.valuenetwork import QValueNetworkReturns
+
 from agents.pgagent import PolicyGradientAgent
 from agents.reinforce import REINFORCEAgent
 
@@ -23,7 +26,8 @@ if __name__ == '__main__':
     ENV = gym.make('CartPole-v1')
 
     # policy = LinearDiscretePolicy(ENV.observation_space, ENV.action_space, alpha=1e-3)
-    policy = NNDiscretePolicy(ENV.observation_space, ENV.action_space, alpha=1e-3)
+    # policy = NNDiscretePolicy(ENV.observation_space, ENV.action_space, alpha=1e-3)
+    policy = NNGaussianPolicy
     q_network = QValueNetworkReturns(ENV.observation_space, ENV.action_space, hidden_size=16, n_hidden=0)
 
     agent = ActorCriticAgent(
