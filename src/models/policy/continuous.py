@@ -3,6 +3,8 @@ import torch
 from torch import nn
 import gymnasium as gym
 from models.policy import AbstractPolicy
+from torch.optim import Adam
+from utils import prepare_batch
 
 class LinearGaussianPolicy(AbstractPolicy):
     '''Approximates a continuous policy using a Linear combination of the features of the state. Predicts a mean and standard deviation for each factor of the action space.
@@ -87,26 +89,15 @@ class NNGaussianPolicy(AbstractPolicy, nn.Module):
         assert not isinstance(action_space, gym.spaces.Discrete), 'Discrete action space cannot be continuous'
 
 
-        if from_image:
-            self.state_dim = self.state_space.shape
-            self.conv = CNN(self.state_dim)
-            self.mu = nn.Sequential(
-                    self.conv,
-                    nn.Linear(self.conv.output_size, hidden_size),
-                    nn.ReLU(True),  
-                    nn.Linear(hidden_size, self.action_dim),
-                    )
-        else:
-            self.mu = nn.Sequential(
-                    nn.Linear(self.state_dim, hidden_size),
-                    nn.ReLU(True),  
-                    nn.Linear(hidden_size, self.action_dim)
-                    )
+        self.mu = nn.Sequential(
+                nn.Linear(self.state_dim, hidden_size),
+                nn.ReLU(True),  
+                nn.Linear(hidden_size, self.action_dim)
+                )
 
-        # self.sigma = nn.Linear(hidden_size, self.action_dim)
         self.sigma = torch.ones(self.action_dim, dtype=torch.float32, requires_grad=True)
 
-        self.optim = Adam(list(self.get_params()) + [self.sigma], lr=self.alpha )
+        self.optim = Adam(list(self.get_params()) + [self.sigma], lr=self.lr )
 
     def pdf(self, state):
         mu, sd = self.forward(torch.tensor(state))

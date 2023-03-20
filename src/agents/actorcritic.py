@@ -20,8 +20,6 @@ class ActorCriticAgent(PolicyGradientAgent):
             critic_fn:QValueNetworkReturns, 
             batch_size:int=16, 
             gamma: float = 0.98, 
-            target_update:int=400,
-            buffer_size:int=5000,
             deterministic=True,
             ) -> None:
         '''
@@ -84,11 +82,12 @@ class DDPGAgent(ActorCriticAgent):
                  target_update: int = 400,
                  buffer_size: int = 5000) -> None:
 
-        super().__init__(env, actor_fn, critic_fn, batch_size, gamma, target_update, buffer_size)
+        super().__init__(env, actor_fn, critic_fn, batch_size, gamma)
 
         self.optim_policy = deepcopy(self.policy)
         self.optim_returns = deepcopy(self.returns)
         self.target_update = target_update
+        self.buffer_size = buffer_size
 
         self.replay = ReplayBuffer(
                 buffer_size,

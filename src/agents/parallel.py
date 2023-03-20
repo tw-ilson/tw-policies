@@ -7,12 +7,16 @@ from models.policy import AbstractPolicy
 from models.returns import QValueNetworkReturns, ValueNetworkReturns
 from agents.pgagent import PolicyGradientAgent
 from agents.actorcritic import ActorCriticAgent
+from src.models.policy.discrete import NNDiscretePolicy
 
 class A2CAgent(PolicyGradientAgent):
     """Advantage Actor Critic is a policy gradient agent with a special focus on parallel training. The critics learn the value function, while mutiple actors are trained in parallel and get synced with global parameters periodically.
     """
-    def __init__(self, env: Env, actor_fn: AbstractPolicy, critic_fn: QValueNetworkReturns, batch_size: int = 16, gamma: float = 0.98, target_update: int = 400, buffer_size: int = 5000) -> None:
-        super().__init__(env, actor_fn, critic_fn, batch_size, gamma, target_update, buffer_size)
-        agent = ActorCriticAgent(
-        self.children = deepcopy()
+    def __init__(self, env: Env, actor_fn: NNDiscretePolicy, critic_fn: QValueNetworkReturns, N, gamma: float = 0.98, ):
+        super().__init__(env, actor_fn, critic_fn, gamma )
+        agent = ActorCriticAgent(env, self.policy, self.returns)
+        self.children = [deepcopy(agent) for _ in range(N)]
+
+    def train(self, n_iter):
+        return super().train(n_iter)
 

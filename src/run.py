@@ -1,7 +1,7 @@
-import matplotlib.pyplot as plt
+
 import gymnasium as gym
 import torch
-from agents.actorcritic import ActorCriticAgent
+from agents.actorcritic import ActorCriticAgent, DDPGAgent
 
 
 #this needs to go up here
@@ -10,7 +10,7 @@ if torch.cuda.is_available():
 
 from models.policy import AbstractPolicy
 from models.policy import (LinearDiscretePolicy, LinearGaussianPolicy, NNDiscretePolicy)
-from src.models.policy.continuous import NNGaussianPolicy
+from models.policy.continuous import NNGaussianPolicy
 from models.returns.valuenetwork import QValueNetworkReturns
 
 from agents.pgagent import PolicyGradientAgent
@@ -23,14 +23,15 @@ This file provides a simple example usage of the library and its usage. As you c
 
 if __name__ == '__main__':
 
-    ENV = gym.make('CartPole-v1')
+    # ENV = gym.make('CartPole-v1')
+    ENV = gym.make('LunarLanderContinuous-v2')
 
     # policy = LinearDiscretePolicy(ENV.observation_space, ENV.action_space, alpha=1e-3)
     # policy = NNDiscretePolicy(ENV.observation_space, ENV.action_space, alpha=1e-3)
-    policy = NNGaussianPolicy
+    policy = NNGaussianPolicy(ENV.observation_space, ENV.action_space, alpha=1e-3)
     q_network = QValueNetworkReturns(ENV.observation_space, ENV.action_space, hidden_size=16, n_hidden=0)
 
-    agent = ActorCriticAgent(
+    agent = DDPGAgent(
                 env=ENV,
                 actor_fn=policy,
                 critic_fn=q_network
