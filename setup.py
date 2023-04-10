@@ -1,13 +1,13 @@
-from distutils.core import setup
 import os.path
+from setuptools import setup
 
 setup(
     name='tw-policies',
-    version='',
-    packages=[''],
+    version='0.2.1',
+    package_dir={'':'src'},
     url='https://github.com/tw-ilson/tw-policies',
-    license='',
-    author='Tom',
+    license='BSD',
+    author='tw-ilson',
     author_email='wilson.th@northeastern.edu',
-    description='A simple policy gradient algorithms reinforcement learning library with support for pytorch and numpy backprop'
+    description='simple policy gradient algorithms'
 )

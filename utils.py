@@ -2,10 +2,9 @@ from typing import Tuple
 import matplotlib.pyplot as plt
 import torch
 import numpy as np
-import gymnasium as gym
-from gymnasium.spaces.utils import flatten
-
-# TODO: make utilities for converting a Box action space to a set of Discrete actions
+import gym
+from gym.spaces.utils import flatten
+import tracemalloc
 
 def action_mask(a_t, action_dim):
     '''Discrete actions spaces only. Works with batch
@@ -16,13 +15,10 @@ def action_mask(a_t, action_dim):
     mask[np.arange(nbatch), a_t] = 1
     return mask
 
-def prepare_batch(states, actions, values, device='cpu'):
+def prepare_batch(*args, device='cpu'):
     '''Convert lists representing batch of transitions into pytorch tensors
     '''
-    states = torch.as_tensor(states, dtype=torch.float32, device=device)
-    actions = torch.as_tensor(actions, dtype=torch.float32, device=device)
-    values = torch.as_tensor(values, dtype=torch.float32, device=device)
-    return states, actions, values
+    return [torch.as_tensor(p, dtype=torch.float32, device=device) for p in args]
 
 def logsumexp(x):
     '''Trick to compute expontial without float overflow
@@ -40,8 +36,11 @@ def plot_curves(**curves):
     [a.clear() for a in axs]
     for i, name in enumerate(curves):
         # print(name, curves[name].shape)
+        if torch.is_tensor(curves[name][0]):
+            curves[name] = torch.tensor(curves[name], device='cpu').numpy()
         if len(curves[name]) > 0:
             axs[i].plot(np.convolve(curves[name], np.ones(W)/W, 'valid'))
         axs[i].set_xlabel('steps')
         axs[i].set_ylabel(name)
+    plt.show()
 

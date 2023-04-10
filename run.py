@@ -1,4 +1,3 @@
-
 import gymnasium as gym
 import torch
 from agents.actorcritic import ActorCriticAgent, DDPGAgent
@@ -26,9 +25,9 @@ if __name__ == '__main__':
     # ENV = gym.make('CartPole-v1')
     ENV = gym.make('LunarLanderContinuous-v2')
 
-    # policy = LinearDiscretePolicy(ENV.observation_space, ENV.action_space, alpha=1e-3)
-    # policy = NNDiscretePolicy(ENV.observation_space, ENV.action_space, alpha=1e-3)
-    policy = NNGaussianPolicy(ENV.observation_space, ENV.action_space, alpha=1e-3)
+    # policy = LinearDiscretePolicy(ENV.observation_space, ENV.action_space, lr=1e-3)
+    # policy = NNDiscretePolicy(ENV.observation_space, ENV.action_space, lr=1e-3)
+    policy = NNGaussianPolicy(ENV.observation_space, ENV.action_space, lr=1e-7)
     q_network = QValueNetworkReturns(ENV.observation_space, ENV.action_space, hidden_size=16, n_hidden=0)
 
     agent = DDPGAgent(

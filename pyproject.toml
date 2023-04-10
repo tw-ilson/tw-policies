@@ -1,0 +1,19 @@
+[build-system]
+requires=["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name="tw-policies"
+version="0.2.1"
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "Box2D",
+    "box2d-py",
+    "gym",
+    "gym-notices",
+    "pygame",
+    "scipy",
+    "torch",
+    "tqdm",
+    ]
