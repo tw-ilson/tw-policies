@@ -35,7 +35,8 @@ def plot_curves(**curves):
 
     [a.clear() for a in axs]
     for i, name in enumerate(curves):
-        # print(name, curves[name].shape)
+
+        print(f'plotting {name}...')
         if torch.is_tensor(curves[name][0]):
             curves[name] = torch.tensor(curves[name], device='cpu').numpy()
         if len(curves[name]) > 0:

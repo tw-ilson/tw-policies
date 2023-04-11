@@ -4,6 +4,7 @@ import numpy as np
 import gym
 from gym.wrappers import normalize
 from abc import ABC, abstractmethod
+from tqdm import tqdm
 
 from ..models.policy import AbstractPolicy
 from ..models.value import AbstractReturns
@@ -33,23 +34,28 @@ class PolicyGradientAgent(ABC):
 
         self.policy = policy
 
+        self.episode_rewards = 0
+        self.last_obs = np.zeros(self.policy.action_dim)
+        self.plot_info = {'episode rewards': []}
+        self.reset()
+
+        self._term = np.zeros(self.policy.action_dim) 
+
+    def reset(self):
+        self.plot_info['episode rewards'].append(self.episode_rewards)
+        self.episode_rewards = 0
         self.last_obs = self.env.reset()
-        self.plot_info = {
-                'playout advantage': [],
-                'score': [],
-                'episode length': []
-                }
 
     def step(self):
         """ Select action and take action """
         a_t = self.policy(self.last_obs) 
         obs = self.last_obs
         new_obs, reward, done, info = self.env.step(a_t)
+        self.last_obs = new_obs
         if done:
-            self.last_obs = self.env.reset()
-        else:
-            self.last_obs = new_obs
-
+            self._term = new_obs
+            self.reset()
+        self.episode_rewards += reward
         return obs, a_t, reward, done
 
     def playout(self, render=False):
@@ -66,15 +72,28 @@ class PolicyGradientAgent(ABC):
             dones.append(done)
             if render:
                 self.env.render()
+        states.append(self._term)
         states = np.array(states)
         actions = np.array(actions)
         rewards = np.array(rewards)
         dones = np.array(dones)
         return states, actions, rewards, dones
 
-    @abstractmethod
-    def train(self, n_iter):
+    def train(self, n_iter, smoothing=50):
         '''This method will implement the policy gradient algorithm for each respective subclass'''
+        pbar = tqdm(range(1, n_iter+1))
+        for episode in pbar:
+            self.update(episode)
+            print_window = min(smoothing, len(self.plot_info['episode rewards']))
+            if print_window > 0:
+                smoothed_reward = sum(self.plot_info['episode rewards'][-print_window:-1])/print_window
+                pbar.set_description(f"reward: {smoothed_reward:.3f}")
+        self.display_plots()
+        pbar.close()
+
+    @abstractmethod
+    def update(self, episode):
+        """ Implement your algorithm in this method to be called each iteration """
         raise NotImplemented
 
     def display_plots(self):
