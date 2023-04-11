@@ -122,7 +122,7 @@ class QValueNetworkReturns(AbstractReturns, nn.Module):
         '''optimizes the q-value estimator
         '''
         self.optim.zero_grad()
-        loss = td_err #* self.forward(s, a)
+        loss = td_err * self.forward(s, a)
         loss.mean().backward()
         self.optim.step()
         del loss

@@ -14,31 +14,16 @@ class REINFORCEAgent(PolicyGradientAgent):
 
     '''
     def __init__(self, env, policy, gamma: float = 0.98) -> None:
-        super().__init__(env, policy,  gamma)
+        super().__init__(env, policy, gamma)
         self.returns = MonteCarloReturns(gamma, normalize=True)
-        self.plot_info = {
-                'playout advantage': [],
-                'policy loss': [],
-                }
+        self.plot_info['policy score'] = []
+
+    def update(self, episode):
+        tau = self.playout()
+        states, actions, rewards, dones = tau
+        R = self.returns.reward_to_go(rewards)
+        score = self.policy.score(states[:-1], actions, R);
+        self.policy.optimize(score) 
+
+        self.plot_info['policy score'].append(score)
         
-    def train(self, n_iter):
-        pbar = tqdm(range(1, n_iter+1), file=sys.stdout)
-        for episode in pbar:
-            tau = self.playout()
-            states, actions, rewards, dones = tau
-            R = self.returns.reward_to_go(rewards)
-            # print(states.shape, actions.shape, R[0])
-            if (torch.is_tensor(states)):
-                print('HERE ')
-            score = self.policy.score(states[:-1], actions, R);
-            self.policy.optimize(score) 
-
-            self.plot_info['playout advantage'].append(sum(rewards))
-            self.plot_info['policy loss'].append(score)
-
-            tmp = min(100, len(self.plot_info['playout advantage']))
-            avg_return = sum(self.plot_info['playout advantage'][-tmp:-1])/tmp
-            pbar.set_description(f"avg. return == {avg_return}")
-        self.display_plots()
-        pbar.close()
-
