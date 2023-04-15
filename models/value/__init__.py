@@ -1,2 +1,2 @@
 from .abstractreturns import AbstractReturns
-from .estimation import ValueNetworkReturns, QValueNetworkReturns, AdvantageNetworkReturns, TDErr
+from .estimation import GAEReturns, QValueNetworkReturns, AdvantageNetworkReturns, TDErr, TD_resid

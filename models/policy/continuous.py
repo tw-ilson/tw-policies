@@ -101,7 +101,7 @@ class NNGaussianPolicy(AbstractPolicy, nn.Module):
         self.optim = Adam(self.get_params(), lr=self.lr )
 
     def pdf(self, state):
-        mu, sd = self.forward(torch.tensor(state))
+        mu, sd = torch.nn.functional.softmax(self.forward(torch.tensor(state)))
         return torch.distributions.Normal(mu, sd)
 
     def forward(self, state):
@@ -126,11 +126,10 @@ class NNGaussianPolicy(AbstractPolicy, nn.Module):
     def optimize(self, score):
         '''updates network parameters according to score calculation.
         '''
-        score.backward(retain_graph=True)
+        score.backward()
         self.optim.step()
         self.optim.zero_grad()
         score.detach_()
-
 
     def get_params(self):
         return self.parameters()

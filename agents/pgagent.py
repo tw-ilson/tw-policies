@@ -86,9 +86,8 @@ class PolicyGradientAgent(ABC):
             self.update(episode)
             print_window = min(smoothing, len(self.plot_info['episode rewards']))
             if print_window > 0:
-                smoothed_reward = sum(self.plot_info['episode rewards'][-print_window:-1])/print_window
+                smoothed_reward = sum(self.plot_info['episode rewards'][-print_window:])/print_window
                 pbar.set_description(f"reward: {smoothed_reward:.3f}")
-        self.display_plots()
         pbar.close()
 
     @abstractmethod

@@ -22,8 +22,22 @@ class REINFORCEAgent(PolicyGradientAgent):
         tau = self.playout()
         states, actions, rewards, dones = tau
         R = self.returns.reward_to_go(rewards)
-        score = self.policy.score(states[:-1], actions, R);
+        score = self.policy.score(states[:-1], actions, R)
         self.policy.optimize(score) 
 
         self.plot_info['policy score'].append(score)
+
+class PPO_REINFORCEAgent(PolicyGradientAgent):
+    def __init__(self, env, policy, gamma: float = 0.98) -> None:
+        super().__init__(env, policy, gamma)
+        self.returns = MonteCarloReturns(gamma, normalize=True)
+        self.plot_info['policy score'] = []
+
+    def update(self, episode):
+        tau = self.playout()
+        states, actions, rewards, dones = tau
+        R = self.returns.reward_to_go(rewards)
+        score = self.policy.score(states[:-1], actions, R)
+        # Trust Region constraint
         
+

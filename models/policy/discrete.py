@@ -82,7 +82,7 @@ class NNDiscretePolicy(AbstractPolicy, nn.Module):
             dropout:float=0.6
             ):
 
-        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         AbstractPolicy.__init__(self, state_space, action_space, lr)
         nn.Module.__init__(self)
@@ -94,9 +94,6 @@ class NNDiscretePolicy(AbstractPolicy, nn.Module):
                 d_hidden=hidden_size)
         self.softmax = nn.LogSoftmax(dim=-1)
 
-        #include some very small noise
-        #self.epsilon = np.finfo(np.float32).eps.item()
-
         self.optim = torch.optim.Adam(self.get_params(), lr=self.lr)
         self.to(self.device)
 
@@ -105,11 +102,10 @@ class NNDiscretePolicy(AbstractPolicy, nn.Module):
         s = torch.tensor(state, dtype=torch.float32, device=self.device)
         assert not torch.isnan(s).any()
         x = self.layers(s)
-        # x = self.affine(s)
-        return self.softmax(x)
+        logits = self.softmax(x)
+        return logits
 
     def pdf(self, state):
-        # print(state.shape)
         probs = self.forward(state)
         return Categorical(logits=probs)
 
@@ -123,8 +119,9 @@ class NNDiscretePolicy(AbstractPolicy, nn.Module):
         '''
         s, a, v = prepare_batch(s, a, v, device=self.device)
         dist = self.pdf(s)
+
         #negative-log-likelihood 
-        score = torch.sum(-dist.log_prob(a.squeeze()) * v.detach())
+        score = torch.sum(-dist.log_prob(a) * v.detach())
         return score
     
     def optimize(self, score):

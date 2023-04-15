@@ -9,18 +9,14 @@ class MonteCarloReturns(AbstractReturns):
         super().__init__()
         self.gamma = gamma
         self.normalize = normalize
-        # self.returns = 0
-
-    def reset(self):
-        self.returns = 0
 
     def __call__(self, state):
         return self.returns(state)
 
-    def reward_to_go(self, rewards):
+    def reward_to_go(self, rewards, term=0):
         '''based on a playout, calculates the average expected return from all states encountered
         '''
-        R = 0
+        R = term 
         returns = deque()
         for r in rewards[::-1]:
             R = r + self.gamma * R
@@ -33,9 +29,3 @@ class MonteCarloReturns(AbstractReturns):
                 s -= avg
         self.returns = returns
         return returns
-
-class BaselineMCReturns(MonteCarloReturns):
-    def __init__(self, baseline, gamma: float=0.98, normalize: bool = False):
-        super().__init__(gamma, normalize)
-        self.baseline = baseline
-        
