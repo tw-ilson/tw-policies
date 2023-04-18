@@ -101,13 +101,13 @@ class NNGaussianPolicy(AbstractPolicy, nn.Module):
         self.optim = Adam(self.get_params(), lr=self.lr )
 
     def pdf(self, state):
-        mu, sd = torch.nn.functional.softmax(self.forward(torch.tensor(state)))
+        mu, sd = self.forward(torch.tensor(state))
         return torch.distributions.Normal(mu, sd)
 
     def forward(self, state):
         EPS = 1e-6
         MAX = 3
-        mu = self.mean(torch.FloatTensor(state))
+        mu = torch.nn.functional.tanh(self.mean(torch.tensor(state)))
         sigma = torch.clip(torch.exp(self.sd), EPS, MAX)
         return mu, sigma 
 

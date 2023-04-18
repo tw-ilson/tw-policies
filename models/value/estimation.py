@@ -18,7 +18,7 @@ def TDErr(v, vp, r, discount):
     ''' time-difference error between numeric value at t, and value at the following timestep
     '''
     err = TD_resid(v, vp, r, discount)
-    return (err**2).mean()
+    return (err).mean()
 
 #
 # class ValueNetworkReturns(AbstractReturns, torch.nn.Module):
@@ -77,20 +77,24 @@ class QValueNetworkReturns(AbstractReturns, nn.Module):
         # assert action_space.is_np_flattenable, "action space needs to be flat for neural network"
 
         self.gamma = gamma
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         self.discrete_action = isinstance(action_space, gym.spaces.Discrete)
-        print('discrete:', self.discrete_action)
 
         self.d_state = flatdim(state_space)
         self.d_action = flatdim(action_space)
 
+        self.affine1 = nn.Linear(self.d_state, self.d_state)
         self.feedforward = FeedForward(
                 d_input= self.d_state + self.d_action,
                 d_output=1,
                 d_hidden=hidden_size,
-                n_hidden=n_hidden)
+                n_hidden=n_hidden,
+                dropout=0.6,
+                batchnorm=True)
 
         self.optim = torch.optim.Adam(self.feedforward.parameters(), lr=lr)
+        self.to(device=self.device)
 
     def __call__(self, state, action):
         return self.forward(state, action)
@@ -100,19 +104,19 @@ class QValueNetworkReturns(AbstractReturns, nn.Module):
             action = action_mask(action, self.d_action)
         state = torch.as_tensor(state, dtype=torch.float32)
         action = torch.as_tensor(action, dtype=torch.float32)
-        x = torch.cat((state, action), dim=1)
+        x = torch.cat((self.affine1(state), action), dim=1)
         return self.feedforward(x)
 
     @torch.no_grad()
     def predict(self, state: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
         Q = self.forward(state, action)
-        return Q.numpy()
+        return Q
 
     def optimize(self, td_err):
         '''optimizes the q-value estimator
         '''
         self.optim.zero_grad()
-        loss = td_err**2 #* self.forward(s, a)
+        loss = td_err #* self.forward(s, a)
         loss.mean().backward()
         self.optim.step()
         del loss
@@ -171,6 +175,7 @@ class GAEReturns(AbstractReturns, nn.Module):
         """ Lambda is the hyperparameter introduced by GAE, to facilitate the tradeoff between the actual, high-variance rewards, and the estimated value function.
         """
         super(GAEReturns, self).__init__()
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.lam = lam
         self.d_state = flatdim(state_space)
         self.V = FeedForward(self.d_state, 1, n_hidden, hidden_size)
@@ -179,6 +184,7 @@ class GAEReturns(AbstractReturns, nn.Module):
         self.entropy = 0
         self.loss = nn.MSELoss()
         self.optim = torch.optim.Adam(self.V.parameters(), lr)
+        self.to(device=self.device)
 
     def residuals(self, states, rewards):
         next_states = states[1:, :]
@@ -205,10 +211,10 @@ class GAEReturns(AbstractReturns, nn.Module):
         assert(rewards.size() == advantage.size())
         return advantage
 
-    def optimize(self, loss):
-        self.optim.zero_grad()
-        loss.backward()
-        self.optim.step()
+    # def optimize(self, loss):
+    #     self.optim.zero_grad()
+    #     loss.backward()
+    #     self.optim.step()
     
     def optimize(self, states, rewards):
         """ Monte-Carlo error

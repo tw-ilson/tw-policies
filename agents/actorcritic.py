@@ -64,8 +64,6 @@ class QActorCriticAgent(PolicyGradientAgent):
         self.plot_info['td err'].append(td_err)
 
 class A2CAgent(PolicyGradientAgent):
-    """Advantage Actor Critic is a policy gradient agent with a special focus on parallel training. The critics learn the value function, while mutiple actors are trained in parallel and get synced with global parameters periodically.
-    """
     def __init__(self, env: Env, actor_fn: AbstractPolicy, gamma: float = 0.98, lam=0.92):
         super().__init__(env, actor_fn, gamma)
         self.returns = GAEReturns(lam=lam, gamma=gamma, state_space=self.env.observation_space)
@@ -81,8 +79,6 @@ class A2CAgent(PolicyGradientAgent):
         self.policy.optimize(score)
 
         # Optimize Advantage Estimator
-        # entropy = self.policy.pdf(states).entropy()
-        # self.returns.optimize(advantage, entropy.sum().detach().cpu())
         self.returns.optimize(states[:-1,:], rewards)
 
         self.plot_info['score'].append(score.mean().item())
@@ -98,14 +94,14 @@ class DDPGAgent(PolicyGradientAgent):
                  batch_size: int = 128, 
                  gamma: float = 0.99,
                  buffer_size: int = 5000,
-                 tau = 1e-2) -> None:
+                 tau = 0.12) -> None:
 
         super().__init__(
                     env,
                     policy,
                     batch_size)
 
-        self.returns = QValueNetworkReturns(env.observation_space, env.action_space, lr=1e-3, n_hidden=3, hidden_size=200, gamma=0.99)
+        self.returns = QValueNetworkReturns(env.observation_space, env.action_space, lr=1e-3, n_hidden=0, hidden_size=128, gamma=0.99)
 
         # target update ratio
         self.tau = tau
@@ -126,10 +122,10 @@ class DDPGAgent(PolicyGradientAgent):
 
         self.plot_info = {'episode rewards':[],
                           'TD error': [],
-                          # 'policy loss': []
+                          'policy loss': []
                           }
 
-    def copy_weights_target(self):
+    def soft_target_update(self):
         for target_param, param in zip(self.policy_target.parameters(), self.policy.parameters()):
             target_param.data.copy_(param.data * self.tau + target_param.data * (1.0 - self.tau))
         for target_param, param in zip(self.returns_target.parameters(), self.returns.parameters()):
@@ -142,75 +138,32 @@ class DDPGAgent(PolicyGradientAgent):
         else:
             sp = self.last_obs
         
-        self.replay.add_transition(s, a, r, sp)
+        self.replay.add_transition(s, a, r, sp, done)
         if len(self.replay) > self.batch_size:
             # import pdb; pdb.set_trace()
             #sample batch from previous transitions
             batch  = self.replay.sample(self.batch_size)
-            states, actions, rewards, next_states = prepare_batch(*batch)
+            states, actions, rewards, next_states, dones = prepare_batch(*batch)
             # Q-network loss
-            q_value = self.returns(states, actions)
-            next_actions = self.policy_target.forward(next_states)
-            q_target_value = self.returns_target.forward(next_states, next_actions.detach())
-            td_err = TDErr(q_value, q_target_value, rewards, discount=self.gamma)
-
+            with torch.no_grad():
+                next_actions = self.policy_target.forward(next_states)
+                q_target_value = self.returns_target.forward(next_states, next_actions.detach())
+            q_value = self.returns.forward(states, actions)
+            critic_loss = torch.nn.functional.mse_loss(
+                    q_value.squeeze(),
+                    (rewards + self.gamma * q_target_value.squeeze())
+                    )
             # Policy network loss
             policy_loss = -self.returns.forward(states, self.policy.forward(states)).mean()
 
             self.policy.optimize(policy_loss)
+            self.returns.optimize(critic_loss)
 
-            self.returns.optimize(td_err)
+            self.soft_target_update()
 
-            self.copy_weights_target()
-
-
-            # if episode % 100 == 0:
-                # dot = make_dot(td_err, dict(self.returns.named_parameters()))
-                # dot.format = 'png'
-                # dot.render()
-                # exit()
-            self.plot_info['TD error'].append(td_err)
-            # self.plot_info['policy loss'].append(policy_loss)
-
-class PPOAgent(PolicyGradientAgent):
-    def __init__(self, env, policy, epsilon: float = 1e-3, gamma: float = 0.98, lam:float=0.92, tau:float=1e-2, batch_size=128, buffer_size=5000, ) -> None:
-        super().__init__(env, policy, gamma)
-        self.returns = GAEReturns(0.98, self.env.observation_space, gamma=gamma)
-        self.oldpolicy = deepcopy(self.policy)
-        self.returns_target = deepcopy(self.returns)
-
-        #soft target update
-        self.tau = tau
-
-
-        # Initialize a replay buffer
-        self.batch_size = batch_size
-        self.buffer_size = buffer_size
-        self.replay = ReplayBuffer(
-                buffer_size,
-                self.policy.state_space.shape,
-                self.policy.action_space.shape,
-                continuous=True)
-
-        self.plot_info = {'episode rewards':[],
-                          'loss': [],
-                          }
-
-    def update(self, episode):
-        s, a, r, done =  self.step()
-        if done:
-            sp = self._term
-        else:
-            sp = self.last_obs
-        
-        self.replay.add_transition(s, a, r, sp)
-        if len(self.replay) > self.batch_size:
-            batch  = self.replay.sample(self.batch_size)
-            states, actions, rewards, next_states = prepare_batch(*batch)
-
-        raise NotImplemented
-
-
+            if done:
+                self.plot_info['TD error'].append(critic_loss)
+                self.plot_info['policy loss'].append(policy_loss)
 
 # class SACAgent(PolicyGradientAgent):
 #     def __init__(self, 

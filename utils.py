@@ -15,9 +15,10 @@ def action_mask(a_t, action_dim):
     mask[np.arange(nbatch), a_t] = 1
     return mask
 
-def prepare_batch(*args, device='cpu'):
+def prepare_batch(*args):
     '''Convert lists representing batch of transitions into pytorch tensors
     '''
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     return [torch.as_tensor(p, dtype=torch.float32, device=device) for p in args]
 
 def logsumexp(x):
@@ -26,9 +27,8 @@ def logsumexp(x):
     c = x.max()
     return c + np.log(np.sum(np.exp(x - c)))
 
-def plot_curves(**curves):
-    print(len(curves))
-    f, axs = plt.subplots(len(curves), 1, figsize=(7,2.5))
+def plot_curves(filepath:str=None, **curves):
+    f, axs = plt.subplots(len(curves), 1, figsize=(8,2*len(curves)))
     # axs = [axs] if not isinstance(axs, list) else axs
     plt.subplots_adjust(hspace=0.3)
     W = 12 # smoothing window
@@ -43,5 +43,7 @@ def plot_curves(**curves):
             axs[i].plot(np.convolve(curves[name], np.ones(W)/W, 'valid'))
         axs[i].set_xlabel('steps')
         axs[i].set_ylabel(name)
+    if filepath is not None:
+        plt.savefig(filepath)
     plt.show()
 

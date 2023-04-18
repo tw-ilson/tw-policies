@@ -1,6 +1,5 @@
 from typing import Optional
 import numpy as np
-# import ale_py
 import gym
 from gym.wrappers import normalize
 from abc import ABC, abstractmethod
@@ -95,8 +94,6 @@ class PolicyGradientAgent(ABC):
         """ Implement your algorithm in this method to be called each iteration """
         raise NotImplemented
 
-    def display_plots(self):
+    def display_plots(self, filepath=None):
         print('plotting...')
-        plot_curves(**self.plot_info)
-
-
+        plot_curves(filepath=filepath, **self.plot_info)

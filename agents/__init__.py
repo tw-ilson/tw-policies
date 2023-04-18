@@ -1,3 +1,4 @@
 from .pgagent import PolicyGradientAgent
-from .reinforce import REINFORCEAgent
+from .reinforce import ReinforceAgent
+from .ppo import PPOAgent
 from .actorcritic import QActorCriticAgent, A2CAgent, DDPGAgent 

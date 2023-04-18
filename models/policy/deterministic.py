@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from torch import nn
+from torch import device, nn
 import gym
 from torch.optim import Adam
 
@@ -56,7 +56,7 @@ class DeterministicPolicy(AbstractPolicy, nn.Module):
         nn.Module.__init__(self)
         assert isinstance(action_space, gym.spaces.Box), 'Discrete action space cannot be continuous'
 
-        self.mean = FeedForward(d_input=self.state_dim, d_output=self.action_dim, n_hidden=n_hidden, d_hidden=hidden_size, dropout=dropout)
+        self.mean = FeedForward(d_input=self.state_dim, d_output=self.action_dim, n_hidden=n_hidden, d_hidden=hidden_size, dropout=dropout, batchnorm=True)
 
         # Initialize a random process for exploration
         self.sd = noise
@@ -64,7 +64,9 @@ class DeterministicPolicy(AbstractPolicy, nn.Module):
         self.i = 0
 
         self.noise.reset()
-        self.optim = Adam(self.get_params(), lr=self.lr )
+        self.optim = Adam(self.mean.parameters(), lr=self.lr )
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.to(self.device)
 
     def pdf(self, state):
         return super().pdf(state)
@@ -73,8 +75,14 @@ class DeterministicPolicy(AbstractPolicy, nn.Module):
         return super().score(s, a, v)
 
     def __call__(self, state: np.ndarray):
-        action = self.forward(state).detach().numpy()
-        action = self.noise.get_action(action, self.i)
+        self.eval()
+        state = torch.tensor(state, device=self.device)
+        if state.ndim == 1:
+            state = state.unsqueeze(0)
+        action = self.forward(state)
+        self.train()
+        action = self.noise.get_action(action.detach().squeeze().cpu(), self.i)
+        action = np.clip(action, self.action_space.low, self.action_space.high)
         return action
     
     def optimize(self, policy_loss:torch.Tensor):
@@ -84,10 +92,9 @@ class DeterministicPolicy(AbstractPolicy, nn.Module):
         self.optim.zero_grad()
         policy_loss.backward()
         self.optim.step()
-        del policy_loss
 
     def forward(self, state):
-        action = torch.tanh(self.mean(torch.FloatTensor(state)))
+        action = torch.tanh(self.mean(state))
         return action 
 
     def get_params(self):

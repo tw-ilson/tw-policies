@@ -29,7 +29,6 @@ class LinearDiscretePolicy(AbstractPolicy):
         return np.dot(self.weights, state)
 
     def __call__(self, state: np.ndarray):
-
         log_probs = self.pdf(state)
 
         #convert back from log space to discrete categorical using Gumbel-max trick:
@@ -44,9 +43,6 @@ class LinearDiscretePolicy(AbstractPolicy):
             '''
             if torch.is_tensor(v):
                 v = v.detach().cpu().numpy()
-            # print(s)
-            # print(a)
-            # print(v)
             def step_score(s_t, a_t, v_t):
                 assert len(s_t) == self.state_dim
                 sm_probs = self.pdf(s_t)
@@ -117,7 +113,7 @@ class NNDiscretePolicy(AbstractPolicy, nn.Module):
     def score(self, s, a, v):
         ''' Computes the negative-log-likelihood of a chosen action, scaled by the value function at this state.
         '''
-        s, a, v = prepare_batch(s, a, v, device=self.device)
+        s, a, v = prepare_batch(s, a, v)
         dist = self.pdf(s)
 
         #negative-log-likelihood 
