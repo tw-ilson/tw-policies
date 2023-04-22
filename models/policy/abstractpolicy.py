@@ -8,9 +8,10 @@ class AbstractPolicy(ABC):
     '''Abstract class to represent a stochastic policy function approximator.
     '''
 
-    def __init__(self, state_space:gym.Space, action_space:gym.Space, lr:float=1e-3, continuous_action:bool=False, deterministic:bool=False) -> None:
-        print(f"State space: {state_space}\nAction space: {action_space}")
-        self.continuous_action = continuous_action
+    def __init__(self, state_space:gym.Space, action_space:gym.Space, lr:float=1e-3, is_continuous:bool=False, is_deterministic:bool=False) -> None:
+        # print(f"State space: {state_space}\nAction space: {action_space}")
+        self.is_continuous = is_continuous
+        self.is_deterministic = is_deterministic
         self.state_space = state_space
         self.state_dim = flatdim(state_space)
         self.action_space = action_space

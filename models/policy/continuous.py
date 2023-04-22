@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from torch import nn
+from torch import device, nn
 import gym
 from torch.optim import Adam
 
@@ -13,7 +13,7 @@ class LinearGaussianPolicy(AbstractPolicy):
     '''Approximates a continuous policy using a Linear combination of the features of the state. Predicts a mean and standard deviation for each factor of the action space.
     '''
     def __init__(self, state_space, action_space, alpha) -> None:
-        super().__init__(state_space, action_space, alpha, continuous_action=True)
+        super().__init__(state_space, action_space, alpha, is_continuous=True)
         assert not isinstance(self.env.action_space, gym.spaces.Discrete), 'Discrete action space cannot be continuous'
 
         self.mu_weight = np.random.uniform(-1, 1, size=(self.action_dim, self.state_dim))
@@ -83,38 +83,42 @@ class NNGaussianPolicy(AbstractPolicy, nn.Module):
             n_hidden=1,
             hidden_size=64, 
             lr:float=1e-3,
+            annealing=False
             ):
 
-        AbstractPolicy.__init__(self, state_space, action_space, lr, continuous_action=True)
+        AbstractPolicy.__init__(self, state_space, action_space, lr, is_continuous=True)
         nn.Module.__init__(self)
+        self.annealing = annealing
         assert not isinstance(action_space, gym.spaces.Discrete), 'Discrete action space cannot be continuous'
         self.mean = FeedForward(d_input=self.state_dim, 
                                 d_output=self.action_dim, 
                                 n_hidden=n_hidden, 
                                 d_hidden=hidden_size, 
                                 )
-        self.sd = torch.ones(self.action_dim, dtype=torch.float32, requires_grad=True)
+        # Homo-schedastic noise:
+        self.sd = nn.Parameter(torch.ones(self.action_dim, dtype=torch.float32, requires_grad=True))
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        # self.dist = torch.distributions.Normal(self.mean, self.sd)
-        # self.forward(torch.zeros(self.state_dim))
-
-        self.optim = Adam(self.get_params(), lr=self.lr )
+        self.optim = Adam(self.get_params(), lr=self.lr)
+        self.to(self.device)
 
     def pdf(self, state):
-        mu, sd = self.forward(torch.tensor(state))
-        return torch.distributions.Normal(mu, sd)
+        mu, sd = self.forward(state)
+        return torch.distributions.MultivariateNormal(mu, sd)
 
     def forward(self, state):
         EPS = 1e-6
         MAX = 3
-        mu = torch.nn.functional.tanh(self.mean(torch.tensor(state)))
-        sigma = torch.clip(torch.exp(self.sd), EPS, MAX)
+        state = torch.as_tensor(state, device=self.device)
+        mu = torch.nn.functional.tanh(self.mean(state))
+        torch.clip(torch.exp(self.sd), EPS, MAX)
+        sigma = torch.diag_embed(self.sd)
         return mu, sigma 
 
     def __call__(self, state: np.ndarray):
         dist = self.pdf(state)
         action = dist.rsample()
-        return action.detach().numpy()
+        return action.cpu().detach().numpy()
     
     def score(self, s, a, v):
         ''' Computes the score function of the policy gradient with respect to the parameters

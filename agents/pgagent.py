@@ -72,10 +72,10 @@ class PolicyGradientAgent(ABC):
             if render:
                 self.env.render()
         states.append(self._term)
-        states = np.array(states)
-        actions = np.array(actions)
-        rewards = np.array(rewards)
-        dones = np.array(dones)
+        states = np.asarray(states)
+        actions = np.asarray(actions)
+        rewards = np.asarray(rewards)
+        dones = np.asarray(dones)
         return states, actions, rewards, dones
 
     def train(self, n_iter, smoothing=50):

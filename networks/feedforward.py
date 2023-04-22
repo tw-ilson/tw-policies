@@ -4,7 +4,7 @@ import torch.nn as nn
 class FeedForward(nn.Module):
     """Simple Feed Forward Neural Network"""
 
-    def __init__(self, d_input, d_output, d_hidden, n_hidden=0, dropout=0.6, batchnorm=True) -> None:
+    def __init__(self, d_input, d_output, d_hidden, n_hidden=0, dropout=0.6, batchnorm=False) -> None:
         super().__init__()
         d = d_input
         layers = []

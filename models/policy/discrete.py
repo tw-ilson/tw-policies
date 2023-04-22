@@ -95,7 +95,7 @@ class NNDiscretePolicy(AbstractPolicy, nn.Module):
 
     def forward(self, state):
         
-        s = torch.tensor(state, dtype=torch.float32, device=self.device)
+        s = torch.as_tensor(state, dtype=torch.float32, device=self.device)
         assert not torch.isnan(s).any()
         x = self.layers(s)
         logits = self.softmax(x)
@@ -123,6 +123,7 @@ class NNDiscretePolicy(AbstractPolicy, nn.Module):
     def optimize(self, score):
         '''updates network parameters according to score calculation.
         '''
+        torch.autograd.set_detect_anomaly(True)
         self.optim.zero_grad()
         score.backward()
         self.optim.step()

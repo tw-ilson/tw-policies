@@ -35,10 +35,10 @@ class ReplayBuffer:
         '''Add single transition to replay buffer, overwriting old transitions
         if buffer is full
         '''
-        self.data['state'][self._next_idx,:] = s
-        self.data['action'][self._next_idx, :] = a
+        self.data['state'][self._next_idx] = s
+        self.data['action'][self._next_idx] = a
         self.data['reward'][self._next_idx] = r
-        self.data['next_state'][self._next_idx, :] = sp
+        self.data['next_state'][self._next_idx] = sp
         self.data['done'][self._next_idx] = d
 
         self.length = min(self.length + 1, self.size)
