@@ -38,7 +38,7 @@ class SACAgent(PolicyGradientAgent):
         self.replay = ReplayBuffer(
                 buffer_size,
                 self.policy.state_space.shape,
-                self.policy.state_space.shape,
+                self.policy.action_space.shape,
                 continuous=True)
 
         self.plot_info['Q loss'] = []
@@ -64,7 +64,7 @@ class SACAgent(PolicyGradientAgent):
 
             # Calculate Q target value, with penalty
             with torch.no_grad():
-                next_state_action = self.policy(next_states)
+                next_state_action = torch.tensor(self.policy(next_states), device=self.policy.device)
                 next_state_log_prob = self.policy.pdf(next_states).log_prob(next_state_action)
                 qa_next_target = self.Qa_target(next_states, next_state_action)
                 qb_next_target = self.Qb_target(next_states, next_state_action)

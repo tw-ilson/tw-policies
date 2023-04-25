@@ -4,3 +4,4 @@ from .ppo import PPOAgent
 from .actorcritic import QActorCriticAgent
 from .a2c import A2CAgent
 from .ddpg import DDPGAgent 
+from .sac import SACAgent

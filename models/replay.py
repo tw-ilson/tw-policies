@@ -24,6 +24,7 @@ class ReplayBuffer:
         self.length = 0
         self.size = size
         self._next_idx = 0
+        print(state_shape)
         self.data = {'state' : np.zeros((size, *state_shape), dtype=np.float32),
                      'action' : np.zeros((size, *action_shape), dtype=np.float32 if continuous else np.uint8),
                      'reward' : np.zeros((size), dtype=np.float32),

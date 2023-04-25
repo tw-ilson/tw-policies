@@ -20,53 +20,6 @@ def TDErr(v, vp, r, discount):
     err = TD_resid(v, vp, r, discount)
     return (err).mean()
 
-#
-# class ValueNetworkReturns(AbstractReturns, torch.nn.Module):
-#     def __init__(self, state_space, n_hidden=1, hidden_size=64, lr=1e-3, gamma=0.98) -> None:
-#         """Produces value estimation for state-action pairs 
-#
-#         Args:
-#             input_shape (tuple, optional): Shape of the image (C, H, W). Should be square.
-#             NOTES: have 2 predictions of direct joint values: (base and gripper), two predictions
-#             of combinations of motors: (forward z values, and vertical position adjust)
-#         """
-#         super(ValueNetworkReturns, self).__init__()
-#
-#         # assert state_space.is_np_flattenable, "needs to be flattened for Neural Network"
-#         self.gamma = gamma
-#
-#         self.d_state = flatdim(state_space)
-#
-#         self.feedforward = FeedForward(
-#                 d_input=self.d_state,
-#                 d_output=1,
-#                 d_hidden=hidden_size,
-#                 n_hidden=n_hidden)
-#
-#         self.mse = torch.nn.MSELoss()
-#         self.optim = torch.optim.Adam(self.parameters(), lr=lr)
-#
-#     def __call__(self, state):
-#         return self.forward(state)
-#
-#     def forward(self, state) -> torch.Tensor:
-#         state = torch.as_tensor(state)
-#         return self.feedforward(state)
-#
-#     @torch.no_grad()
-#     def predict(self, state: torch.Tensor) -> torch.Tensor:
-#         "Predicts 4d action for an input state, without storing gradient"
-#         V = self.forward(state)
-#         return V
-#     
-#     def optimize(self, s, td_err):
-#         '''optimizes the value estimator
-#         '''
-#         self.optim.zero_grad()
-#         loss = td_err 
-#         loss.backward()
-#         self.optim.step()
-
 class QValueNetworkReturns(AbstractReturns, nn.Module):
     """Q-value network which computes a predicted return based on current state and action taken
     """
