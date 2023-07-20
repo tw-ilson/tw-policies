@@ -9,69 +9,6 @@ from ...utils import prepare_batch
 
 from . import AbstractPolicy
 
-class LinearGaussianPolicy(AbstractPolicy):
-    '''Approximates a continuous policy using a Linear combination of the features of the state. Predicts a mean and standard deviation for each factor of the action space.
-    '''
-    def __init__(self, state_space, action_space, alpha) -> None:
-        super().__init__(state_space, action_space, alpha, is_continuous=True)
-        assert not isinstance(self.env.action_space, gym.spaces.Discrete), 'Discrete action space cannot be continuous'
-
-        self.mu_weight = np.random.uniform(-1, 1, size=(self.action_dim, self.state_dim))
-        self.sd_weight = np.ones(self.action_dim)
-
-        self.EPS = 1e-6
-    
-    def forward(self, state):
-        #Dense linear combination of state features
-        mu = np.dot(self.mu_weight, state)
-
-        #log-sd is based on pure weights
-        sd = np.exp(self.sd_weight) #- logsumexp(self.sd_weight))
-        sd = np.clip(sd, self.EPS, 2)
-
-        return mu, sd
-
-    def pdf(self, state):
-        '''The gaussian log-probability density calculation
-        '''
-        mu, sd = self.forward(state)
-        log_probs = lambda x: -0.5 * (x - mu)/sd**2 - np.log(sd * (2 * np.pi)**(0.5))
-        return log_probs
-
-    def __call__(self, state: np.ndarray):
-        #sample randomly from gaussian distribution
-        mu, sd = self.forward(state)
-        dev = np.random.multivariate_normal(mu, np.diag(sd))
-
-        act = mu + dev
-        
-        assert len(act) == self.action_dim
-        return act
-
-    def score(self, s, a, v):
-        ''' In this version of the implementation, computes the gradient wrt to the output of the softmax function, 
-            which follows a single linear combination layer of the state input.
-        '''
-        def step_score(s_t, a_t, v_t):
-            mu, sd = self.forward(s_t)
-
-            mu_grad = v_t * np.outer(s_t, (a_t - mu))/(sd**2)
-            sd_grad = ((a_t - mu)**2 - sd**2)/ sd**3
-            return np.array([mu_grad, sd_grad])
-        
-        scores = np.array([step_score(s_t, a_t, v_t) for s_t, a_t, v_t in zip(s, a, v)])
-        return np.mean(scores[:, 0], axis=0), np.mean(scores[:, 1], axis=0)
-
-    def optimize(self, score):
-        #optimize using computed gradients
-        self.mu_weight = self.mu_weight + self.lr * score[0].T
-        self.sd_weight = self.sd_weight + self.lr * score[1]
-
-        self.mu_weight = np.nan_to_num(self.mu_weight)
-        self.sd_weight = np.nan_to_num(self.sd_weight)
-
-    def get_params(self):
-        return [self.mu_weight, self.sd_weight]
 
 class NNGaussianPolicy(AbstractPolicy, nn.Module):
     '''Neural Network approximator for a continuous policy distribution.

@@ -39,7 +39,7 @@ class OUNoise(object):
         return np.clip(action + ou_state, self.low, self.high)
 
 class DeterministicPolicy(AbstractPolicy, nn.Module):
-    '''A determinisic Policy. States are mapped directly to actions at the output of the network, with no 
+    '''A determinisic Policy. States are mapped directly to actions at the output of the network, without variance
     '''
 
     def __init__(self,

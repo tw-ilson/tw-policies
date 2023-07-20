@@ -1,3 +1,7 @@
+"""
+Neural network wrapper classes to collect state-value estimates
+"""
+
 import torch
 from torch import nn
 import numpy as np
@@ -26,8 +30,8 @@ class QValueNetworkReturns(AbstractReturns, nn.Module):
 
     def __init__(self, state_space, action_space, n_hidden=1, hidden_size=64, lr=0.001, gamma=0.98) -> None:
         super(QValueNetworkReturns, self).__init__()
-        # assert state_space.is_np_flattenable, "state space needs to be flat for neural network"
-        # assert action_space.is_np_flattenable, "action space needs to be flat for neural network"
+        assert state_space.is_np_flattenable, "state space needs to be flat for neural network"
+        assert action_space.is_np_flattenable, "action space needs to be flat for neural network"
 
         self.gamma = gamma
         self.device = "cuda" if torch.cuda.is_available() else "cpu"

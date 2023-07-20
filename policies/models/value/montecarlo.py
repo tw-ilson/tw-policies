@@ -2,7 +2,7 @@ from collections import deque
 from . import AbstractReturns
 
 class MonteCarloReturns(AbstractReturns):
-    """Calculates an exact return value for each state based on the history of transitions
+    """Uses dynamic programming to calculate an exact return value for each state based on the history of transitions
         Important: Needs a full playout
     """
     def __init__(self, gamma:float, normalize:bool=False):
@@ -11,6 +11,7 @@ class MonteCarloReturns(AbstractReturns):
         self.normalize = normalize
 
     def __call__(self, state):
+        #NOTE: bit suspect, must call reward_to_go first.
         return self.returns(state)
 
     def reward_to_go(self, rewards, term=0):

@@ -1,4 +1,5 @@
 
+# NOTE: using old gym because part of the api i like better
 # import gymnasium as gym
 import gym
 import torch
@@ -11,13 +12,9 @@ import policies.agents as agents
 import policies.models.policy as policy
 import policies.models.value as value
 
-import pybullet as pb
-import pybullet_envs
-import pickle
-
-'''
-This file provides a simple example usage of the library and its usage. As you can see, all that is needed to run training, given a Gym environment, is the initialization of the policy (an instance of AbstractPolicy) and the initialization of the Agent (instance of PolicyGradientAgent). Note that the design choice to separate these things allows for experimentation with policies within the same iteration framework.
-'''
+# import pybullet as pb
+# import pybullet_envs
+# import pickle
 
 def main():
     # env_name = 'AntBulletEnv-v0'
@@ -38,39 +35,38 @@ def main():
         torch.save(agent, f"policies/weights/{learner}-{env_name}.pickle")
 
 def pick_learner(learner, envname) -> agents.PolicyGradientAgent:
-    ENV = gym.make(envname)
-
-    agent: agents.PolicyGradientAgent = None
+    env = gym.make(envname)
+    agent: agents.PolicyGradientAgent
     if learner == 'REINFORCE':
-        # policy = policy.NNGaussianPolicy(ENV.observation_space, ENV.action_space, lr=3e-4, n_hidden=1, hidden_size=128)
-        p = policy.NNDiscretePolicy(ENV.observation_space, ENV.action_space, lr=3e-4, n_hidden=1, hidden_size=128)
+        # policy = policy.NNGaussianPolicy(env.observation_space, env.action_space, lr=3e-4, n_hidden=1, hidden_size=128)
+        p = policy.NNDiscretePolicy(env.observation_space, env.action_space, lr=3e-4, n_hidden=1, hidden_size=128)
         agent = agents.ReinforceAgent(
-                    ENV,
+                    env,
                     policy,
                     )
     elif learner == 'A2C':
-        # policy = policy.NNGaussianPolicy(ENV.observation_space, ENV.action_space, lr=3e-4, n_hidden=1, hidden_size=128)
+        # policy = policy.NNGaussianPolicy(env.observation_space, env.action_space, lr=3e-4, n_hidden=1, hidden_size=128)
         p = policy.NNDiscretePolicy(
-                ENV.observation_space,
-                ENV.action_space,
+                env.observation_space,
+                env.action_space,
                 lr=3e-4,
                 n_hidden=1,
                 hidden_size=64)
 
         agent = agents.A2CAgent(
-                    ENV,
+                    env,
                     p)
 
     elif learner == 'DDPG':
         p = policy.DeterministicPolicy(
-                    ENV.observation_space,
-                    ENV.action_space,
+                    env.observation_space,
+                    env.action_space,
                     lr=3e-4,
                     n_hidden=2,
                     hidden_size=128,
                     noise=0.1)
         agent = agents.DDPGAgent(
-                    ENV,
+                    env,
                     p,
                     batch_size=256,
                     buffer_size=int(1e5),
@@ -78,16 +74,16 @@ def pick_learner(learner, envname) -> agents.PolicyGradientAgent:
                     gamma=0.98
                     )
     elif learner == 'PPO':
-        p = policy.NNGaussianPolicy(ENV.observation_space, ENV.action_space, lr=1e-5, n_hidden=2, hidden_size=64)
-        # policy = policy.NNDiscretePolicy(ENV.observation_space,ENV.action_space,lr=3e-4,n_hidden=1,hidden_size=128)
+        p = policy.NNGaussianPolicy(env.observation_space, env.action_space, lr=1e-5, n_hidden=2, hidden_size=64)
+        # policy = policy.NNDiscretePolicy(env.observation_space,env.action_space,lr=3e-4,n_hidden=1,hidden_size=128)
         agent = agents.PPOAgent(
-                    ENV,
+                    env,
                     p,
                     eps=0.1
                     )
     elif learner == 'SAC':
-        p = policy.NNGaussianPolicy(ENV.observation_space, ENV.action_space, lr=1e-5, n_hidden=2, hidden_size=64)
-        agent = agents.SACAgent(ENV, p)
+        p = policy.NNGaussianPolicy(env.observation_space, env.action_space, lr=1e-5, n_hidden=2, hidden_size=64)
+        agent = agents.SACAgent(env, p)
 
     return agent
 
